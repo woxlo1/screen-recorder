@@ -22,6 +22,8 @@ export function App() {
   const history = useRecorderStore((s) => s.history);
   const setHistory = useRecorderStore((s) => s.setHistory);
   const platformCapabilities = useRecorderStore((s) => s.platformCapabilities);
+  const recordingError = useRecorderStore((s) => s.recordingError);
+  const setRecordingError = useRecorderStore((s) => s.setRecordingError);
 
   // 起動時に設定/履歴/プラットフォーム情報を読み込み、以後の設定変更を自動保存する
   useAppBootstrap();
@@ -96,6 +98,21 @@ export function App() {
         <div className="border-b border-yellow-900 bg-yellow-950/50 px-6 py-2 text-sm text-yellow-200">
           画面録画の権限が許可されていません。「システム設定 ＞ プライバシーとセキュリティ ＞
           画面録画」でこのアプリを許可してから再起動してください。
+        </div>
+      )}
+
+      {recordingError && (
+        <div className="flex items-center justify-between border-b border-red-900 bg-red-950/50 px-6 py-2 text-sm text-red-200">
+          <span>
+            録画が中断されました: {recordingError}
+            （Windowsの画面キャプチャ機能が一時的に不安定になることがあります。再度お試しください）
+          </span>
+          <button
+            onClick={() => setRecordingError(null)}
+            className="ml-4 shrink-0 text-red-300 hover:text-red-100"
+          >
+            ✕
+          </button>
         </div>
       )}
 

@@ -64,6 +64,12 @@ export function registerIpcHandlers(): void {
       }
       recordingStateManager.stop();
 
+      // バッファが空の場合は「録画中に予期せず中断した際、mainプロセスの状態だけを
+      // 同期するための呼び出し」とみなし、無意味な0バイトファイルの書き込みをスキップする。
+      if (payload.buffer.byteLength === 0) {
+        return { tempFilePath: '', durationMs: payload.durationMs };
+      }
+
       try {
         const tempFilePath = createTempFilePath('webm');
         await fs.writeFile(tempFilePath, Buffer.from(payload.buffer));

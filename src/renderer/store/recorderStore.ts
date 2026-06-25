@@ -33,6 +33,12 @@ interface RecorderState {
   history: RecordingHistoryItem[];
   /** MP4変換(FFmpeg)の進捗。変換中でない場合はnull */
   conversionProgress: ConversionProgress | null;
+  /**
+   * 録画中に予期せず発生したエラー(OS側のキャプチャ異常など)。
+   * 録画操作自体の失敗(start/stop時のthrow)とは別に、録画中の非同期エラーを
+   * UIに伝えるためのチャンネル。nullの場合はエラーなし。
+   */
+  recordingError: string | null;
 
   // --- actions ---
   setAvailableSources: (sources: CaptureSource[]) => void;
@@ -48,6 +54,7 @@ interface RecorderState {
   setPlatformCapabilities: (info: PlatformCapabilities) => void;
   setHistory: (history: RecordingHistoryItem[]) => void;
   setConversionProgress: (progress: ConversionProgress | null) => void;
+  setRecordingError: (message: string | null) => void;
   reset: () => void;
 }
 
@@ -66,6 +73,7 @@ export const useRecorderStore = create<RecorderState>((set) => ({
   platformCapabilities: null,
   history: [],
   conversionProgress: null,
+  recordingError: null,
 
   setAvailableSources: (sources) => set({ availableSources: sources }),
 
@@ -105,6 +113,8 @@ export const useRecorderStore = create<RecorderState>((set) => ({
   setHistory: (history) => set({ history }),
 
   setConversionProgress: (progress) => set({ conversionProgress: progress }),
+
+  setRecordingError: (message) => set({ recordingError: message }),
 
   reset: () =>
     set({
