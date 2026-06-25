@@ -32,6 +32,15 @@ export default defineConfig({
               formats: ['cjs'],
               fileName: () => 'index.cjs',
             },
+            rollupOptions: {
+              // ffmpeg-static / fluent-ffmpeg はバンドルに含めず、実行時にnode_modulesから
+              // require させる。これらのパッケージは内部で `__dirname` を使って自身の
+              // パッケージディレクトリ(node_modules/ffmpeg-static等)を基準にバイナリや
+              // presetsフォルダのパスを解決している。バンドルに含めてしまうと、その
+              // `__dirname` がバンドル後の出力先(dist-electron/main)を指すようになってしまい、
+              // 「FFmpegの実行ファイルが見つかりません」のように誤ったパスを参照してしまう。
+              external: ['ffmpeg-static', 'fluent-ffmpeg'],
+            },
           },
         },
       },

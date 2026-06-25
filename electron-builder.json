@@ -1,7 +1,15 @@
 {
   "appId": "com.example.screenrecorder",
   "productName": "ScreenRecorder",
-  "files": ["dist/**/*", "dist-electron/**/*"],
+  "files": [
+    "dist/**/*",
+    "dist-electron/**/*",
+    "node_modules/ffmpeg-static/**/*",
+    "node_modules/fluent-ffmpeg/**/*",
+    "node_modules/async/**/*",
+    "node_modules/which/**/*",
+    "node_modules/isexe/**/*"
+  ],
   "asarUnpack": ["node_modules/ffmpeg-static/**"],
   "directories": {
     "output": "release"
