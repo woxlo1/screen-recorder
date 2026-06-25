@@ -1,10 +1,9 @@
 import fs from 'node:fs';
-import { createRequire } from 'node:module';
 import { app } from 'electron';
-
-// このプロジェクトは "type": "module" (ESM) だが、ffmpeg-static は CommonJS パッケージで
-// 文字列パスを default export するだけのモジュールのため、createRequire 経由で読み込む。
-const require = createRequire(import.meta.url);
+// ffmpeg-static は文字列の絶対パス(または非対応プラットフォームではnull)を default export する
+// CommonJSパッケージ。mainプロセスのビルド出力はCJS固定にしているため、通常のimportで
+// 問題なく読み込める(Viteがビルド時にrequire()相当へ変換する)。
+import ffmpegStaticPath from 'ffmpeg-static';
 
 /**
  * ffmpeg-static が返すバイナリパスを、開発時 / パッケージ後の両方で正しく解決する。
@@ -16,9 +15,13 @@ const require = createRequire(import.meta.url);
  *    electron-builder.json の `asarUnpack` で app.asar.unpacked 配下に展開しておく必要がある。
  *  - そのため本番環境では `app.asar` という文字列を `app.asar.unpacked` に置き換えたパスを使う。
  *  - Windows / macOS いずれもこの置換ロジックで対応可能（パス区切り文字に依存しないため）。
+ *
+ * @throws 現在のOS/アーキテクチャ向けのffmpegバイナリが同梱されていない場合
  */
 export function resolveFfmpegPath(): string {
-  const ffmpegStaticPath = require('ffmpeg-static') as string;
+  if (ffmpegStaticPath === null) {
+    throw new Error('このOS/アーキテクチャ向けのFFmpegバイナリが見つかりません');
+  }
 
   if (!app.isPackaged) {
     return ffmpegStaticPath;

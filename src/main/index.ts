@@ -1,12 +1,15 @@
 import { app, BrowserWindow, session } from 'electron';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { registerIpcHandlers } from './ipc-handlers';
 import { persistentStore } from './persistent-store';
 import { getDefaultOutputDir } from './paths';
 import { logFfmpegPath } from './ffmpeg-binary';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// mainプロセスはCommonJSとしてビルドするため、__dirname はNode.jsが自動的に注入する
+// 組み込み変数をそのまま利用できる（ESM用の fileURLToPath(import.meta.url) は不要）。
+// ※ "type": "module" の package.json 配下でも、ビルド出力をCJS固定しているため問題ない。
+//   依存パッケージ(fluent-ffmpeg等)がCJS前提で内部的に __dirname を参照しているため、
+//   mainプロセス全体をESM化すると壊れる(__dirname is not defined)。これがCJS固定の理由。
 
 // Vite開発サーバーのURL（開発時のみ使用）。本番ビルドではdist/index.htmlを読む。
 const DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL'];
