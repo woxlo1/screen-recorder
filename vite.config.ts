@@ -20,10 +20,17 @@ export default defineConfig({
             // 依存パッケージ(fluent-ffmpeg, ffmpeg-static)がCJS前提で内部的に __dirname を
             // 参照している箇所があり、ESM出力のままだと「__dirname is not defined」で
             // 実行時エラーになるため、この対処が必須。
+            //
+            // さらに、Node.js/Electronは「ファイルの中身」ではなく「拡張子 + package.jsonの
+            // type フィールド」だけでESM/CJSを判定するため、中身がCJSコードでも拡張子が
+            // `.js` のままだと package.json の "type": "module" の影響で
+            // 「require is not defined in ES module scope」になる。
+            // これを避けるため出力ファイル自体の拡張子を `.cjs` に固定する
+            // (拡張子 `.cjs` は package.json の type 設定に関わらず常にCommonJSとして扱われる)。
             lib: {
               entry: 'src/main/index.ts',
               formats: ['cjs'],
-              fileName: () => 'index.js',
+              fileName: () => 'index.cjs',
             },
           },
         },
@@ -33,13 +40,12 @@ export default defineConfig({
         vite: {
           build: {
             outDir: 'dist-electron/preload',
-            // preloadはElectronのsandboxプロセスでCommonJSとして読み込まれる前提のため、
-            // package.jsonの "type": "module" の影響で .mjs(ESM) 出力にならないよう明示的にCJS固定する。
-            // main/index.ts側で `.js` 拡張子のパスを指定しているため、出力もここで `.js` に揃える。
+            // preloadも同じ理由で `.cjs` に固定する。
+            // main/index.ts側で `.cjs` 拡張子のパスを指定する必要があるため、出力もここで揃える。
             rollupOptions: {
               output: {
                 format: 'cjs',
-                entryFileNames: 'index.js',
+                entryFileNames: 'index.cjs',
               },
             },
           },

@@ -2,7 +2,7 @@
   "name": "screen-recorder",
   "version": "0.1.0",
   "description": "Windows向け高品質画面録画ソフト (MVP)",
-  "main": "dist-electron/main/index.js",
+  "main": "dist-electron/main/index.cjs",
   "private": true,
   "type": "module",
   "scripts": {
