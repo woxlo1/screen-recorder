@@ -26,8 +26,8 @@ export function AudioPanel() {
       />
       {!systemAudioSupported && (
         <p className="text-xs leading-relaxed text-gray-500">
-          macOSではOS標準APIの制約上、システム音声の録音には対応していません
-          （BlackHole等の仮想オーディオデバイスを利用すれば録音可能です）。
+          このOSではシステム音声の録音に対応していません（macOSの場合はmacOS
+          13(Ventura)以降が必要です。追加アプリのインストールは不要です）。
         </p>
       )}
     </div>

@@ -10,6 +10,7 @@ import type {
   SaveVideoRequest,
   SaveVideoResult,
   SelectFolderResult,
+  StartRecordingRequest,
   StopRecordingResult,
 } from '../shared/types';
 import { listCaptureSources } from './capture-sources';
@@ -44,11 +45,15 @@ export function registerIpcHandlers(): void {
   });
 
   // --- 録画開始(状態管理のみ。実キャプチャはrenderer側) -----------------
-  ipcMain.handle(IpcChannels.StartRecording, async () => {
+  ipcMain.handle(IpcChannels.StartRecording, async (_event, payload: StartRecordingRequest) => {
     if (recordingStateManager.isActive()) {
       return { success: false, errorMessage: '既に録画中です' };
     }
-    recordingStateManager.start();
+    // selectedSourceId / systemAudioRequested は
+    // session.setDisplayMediaRequestHandler (main/index.ts) が参照する。
+    // displayMediaRequestHandlerはOSのピッカーを介さず、ここで記録した
+    // ソースIDとループバック音声要否に基づいて自動的に応答を返す。
+    recordingStateManager.start(payload.source.id, payload.audio.systemAudioEnabled);
     return { success: true };
   });
 

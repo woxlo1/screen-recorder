@@ -2,9 +2,8 @@ import { useCallback, useRef } from 'react';
 import { useRecorderStore } from '../../store/recorderStore';
 import {
   combineStreams,
-  getDisplayMediaStream,
+  getDisplayCaptureStream,
   getMicrophoneStream,
-  getSystemAudioStream,
   stopStream,
 } from './mediaStream';
 import { MediaRecorderController } from './MediaRecorderController';
@@ -72,7 +71,15 @@ export function useRecorderController() {
 
     let videoStream: MediaStream;
     try {
-      videoStream = await getDisplayMediaStream(selectedSource, quality);
+      // 映像とシステム音声(有効な場合)を1回のgetDisplayMediaでまとめて取得する。
+      // main側のsetDisplayMediaRequestHandlerが選択済みソースと
+      // システム音声要否を見て自動応答するため、ここでOSのピッカーは出ない。
+      // platformCapabilitiesが未読み込み、またはOSが非対応の場合は
+      // 安全側に倒してシステム音声をスキップする。
+      const wantsSystemAudio =
+        audioSettings.systemAudioEnabled &&
+        Boolean(platformCapabilities?.systemAudioLoopbackSupported);
+      videoStream = await getDisplayCaptureStream(quality, wantsSystemAudio);
     } catch (error) {
       // macOSでは「システム環境設定 > 画面録画」の許可が無いとここで失敗する
       throw new Error(
@@ -85,11 +92,6 @@ export function useRecorderController() {
     try {
       if (audioSettings.microphoneEnabled) {
         audioStreams.push(await getMicrophoneStream(audioSettings.microphoneDeviceId));
-      }
-      // システム音声はWindowsのみサポート対象(macOSはChromium側の制約で取得不可)。
-      // platformCapabilitiesがまだ読み込めていない場合は安全側に倒してスキップする。
-      if (audioSettings.systemAudioEnabled && platformCapabilities?.systemAudioLoopbackSupported) {
-        audioStreams.push(await getSystemAudioStream());
       }
     } catch (error) {
       stopStream(videoStream);

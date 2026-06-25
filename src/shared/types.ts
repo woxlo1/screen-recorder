@@ -174,7 +174,7 @@ export type MediaPermissionStatus =
  */
 export interface PlatformCapabilities {
   platform: 'win32' | 'darwin' | 'linux';
-  /** システム音声のループバック録音が可能か（macOSは原則 false） */
+  /** システム音声のループバック録音が可能か（Windows/macOS13+で対応、Linuxは原則false） */
   systemAudioLoopbackSupported: boolean;
   screenCapturePermission: MediaPermissionStatus;
   microphonePermission: MediaPermissionStatus;

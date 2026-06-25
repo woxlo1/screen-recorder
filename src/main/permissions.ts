@@ -1,4 +1,5 @@
 import { systemPreferences } from 'electron';
+import os from 'node:os';
 import type { MediaPermissionStatus, PlatformCapabilities } from '../shared/types';
 
 /**
@@ -21,19 +22,34 @@ function normalizeStatus(status: string): MediaPermissionStatus {
 }
 
 /**
+ * macOSのDarwinカーネルバージョンから、ScreenCaptureKitベースの
+ * システム音声ループバック(Electron `audio: 'loopback'`)が利用可能な
+ * macOS 13(Ventura)以降かどうかを判定する。
+ * macOS 13 = Darwin 22。 (例: macOS 14 Sonoma = Darwin 23)
+ */
+function isSystemAudioLoopbackCapableMac(): boolean {
+  const darwinMajorVersion = Number.parseInt(os.release().split('.')[0] ?? '0', 10);
+  return darwinMajorVersion >= 22;
+}
+
+/**
  * 現在のOSと権限状態をまとめて取得する。
  * Windowsには「画面録画の事前許可」という概念が無いため常に granted を返し、
  * システム音声ループバックも常にサポート対象として扱う。
  *
  * macOSでは:
- *  - システム音声ループバック録音はElectron/Chromiumの制約上サポート対象外
  *  - 画面録画・マイクともにユーザーが手動で許可する必要がある
+ *  - システム音声ループバック録音は、ElectronのネイティブAPI
+ *    (`setDisplayMediaRequestHandler` の `audio: 'loopback'`)が
+ *    macOS 13(Ventura)以降のScreenCaptureKitを利用して対応している。
+ *    そのためBlackHole等の仮想オーディオデバイスは不要。
+ *    macOS 12以前ではこのAPIが利用できないため非対応として扱う。
  */
 export function getPlatformCapabilities(): PlatformCapabilities {
   if (process.platform === 'darwin') {
     return {
       platform: 'darwin',
-      systemAudioLoopbackSupported: false,
+      systemAudioLoopbackSupported: isSystemAudioLoopbackCapableMac(),
       screenCapturePermission: normalizeStatus(systemPreferences.getMediaAccessStatus('screen')),
       microphonePermission: normalizeStatus(systemPreferences.getMediaAccessStatus('microphone')),
     };

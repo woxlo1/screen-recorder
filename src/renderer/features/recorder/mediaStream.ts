@@ -2,55 +2,38 @@ import type { CaptureSource, RecordingQualitySettings } from '../../../shared/ty
 import { RESOLUTION_MAP } from '../../../shared/types';
 
 /**
- * Electronの desktopCapturer ソースIDを使って、画面/ウィンドウの映像ストリームを取得する。
- * `chromeMediaSourceId` を指定したmandatory制約は非標準APIのためTypeScriptの
- * 標準DOM型に存在しない。そのためここでだけ型アサーションを許容する。
+ * 画面/ウィンドウの映像ストリームと、必要であればシステム音声(ループバック)を
+ * 1回の getDisplayMedia 呼び出しでまとめて取得する。
+ *
+ * どのソースを録画するか・システム音声を含めるかは、事前に
+ * window.electronAPI.startRecording() で main プロセスに伝えてあり、
+ * main側の session.setDisplayMediaRequestHandler (src/main/index.ts) が
+ * それを見て自動的に応答するため、ここではOSのピッカーは表示されない。
+ *
+ * 旧実装は映像用と音声用で getUserMedia を2回(chromeMediaSource:'desktop' の
+ * mandatory制約)に分けて呼んでおり、これが録画画面が真っ白になる不具合の原因
+ * だった。映像+音声を1回のリクエストにまとめることでこの不具合を回避する。
  *
  * 解像度・FPSは「希望値」として渡す。実際のキャプチャ解像度は元のディスプレイ
  * 解像度に依存するため、ここで指定した値が必ず適用される保証はない
- * （ブラウザ/OSの実装依存）。Windows/macOSどちらでも同じmandatory形式で動作する。
+ * （ブラウザ/OSの実装依存）。
  */
-export async function getDisplayMediaStream(
-  source: CaptureSource,
+export async function getDisplayCaptureStream(
   quality: RecordingQualitySettings,
+  includeSystemAudio: boolean,
 ): Promise<MediaStream> {
   const { width, height } = RESOLUTION_MAP[quality.resolution];
 
-  const constraints = {
-    audio: false,
+  return navigator.mediaDevices.getDisplayMedia({
     video: {
-      mandatory: {
-        chromeMediaSource: 'desktop',
-        chromeMediaSourceId: source.id,
-        minWidth: width,
-        maxWidth: width,
-        minHeight: height,
-        maxHeight: height,
-        minFrameRate: quality.fps,
-        maxFrameRate: quality.fps,
-      },
+      width: { ideal: width },
+      height: { ideal: height },
+      frameRate: { ideal: quality.fps, max: quality.fps },
     },
-  } as unknown as MediaStreamConstraints;
-
-  return navigator.mediaDevices.getUserMedia(constraints);
-}
-
-/**
- * システム音声(ループバック)を取得する。
- * Windows + Electronでは chromeMediaSource: 'desktop' を audio制約にも
- * 指定することで、現在再生中のシステム音声を取得できる。
- */
-export async function getSystemAudioStream(): Promise<MediaStream> {
-  const constraints = {
-    audio: {
-      mandatory: {
-        chromeMediaSource: 'desktop',
-      },
-    },
-    video: false,
-  } as unknown as MediaStreamConstraints;
-
-  return navigator.mediaDevices.getUserMedia(constraints);
+    // includeSystemAudioがfalseの場合、main側のハンドラはaudioトラックを
+    // 含めずに応答するため、audio: true を渡してもマイク音声が紛れ込むことはない。
+    audio: includeSystemAudio,
+  });
 }
 
 /** マイク音声ストリームを取得する */
@@ -69,6 +52,7 @@ export async function getMicrophoneStream(deviceId?: string): Promise<MediaStrea
 export function combineStreams(video: MediaStream, audioStreams: MediaStream[]): MediaStream {
   const combined = new MediaStream();
   video.getVideoTracks().forEach((track) => combined.addTrack(track));
+  video.getAudioTracks().forEach((track) => combined.addTrack(track));
   audioStreams.forEach((stream) => {
     stream.getAudioTracks().forEach((track) => combined.addTrack(track));
   });
@@ -79,3 +63,6 @@ export function combineStreams(video: MediaStream, audioStreams: MediaStream[]):
 export function stopStream(stream: MediaStream | null | undefined): void {
   stream?.getTracks().forEach((track) => track.stop());
 }
+
+/** 型エクスポート用(他モジュールがCaptureSourceを参照する際に再利用しやすくする) */
+export type { CaptureSource };
