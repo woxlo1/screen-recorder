@@ -4,8 +4,9 @@ import type { IpcRequest, IpcResponse } from '../shared/ipc-contract';
 import type { AppSettings, ConversionProgress, SaveVideoRequest } from '../shared/types';
 
 /**
- * invoke呼び出しを型安全にラップするヘルパー。
- * IpcContractに定義されたチャンネル名・引数・戻り値の型がそのまま反映される。
+ * Helper that wraps invoke calls in a type-safe way.
+ * The channel name, argument, and return-value types defined in IpcContract
+ * are carried through automatically.
  */
 function invoke<C extends (typeof IpcChannels)[keyof typeof IpcChannels]>(
   channel: C,
@@ -15,9 +16,9 @@ function invoke<C extends (typeof IpcChannels)[keyof typeof IpcChannels]>(
 }
 
 /**
- * renderer に公開するAPI。
- * nodeIntegration: false の環境でも、ここで定義した関数のみが
- * window.electronAPI として安全に利用可能になる。
+ * API exposed to the renderer.
+ * Even with nodeIntegration: false, only the functions defined here become
+ * safely available as window.electronAPI.
  */
 const electronAPI = {
   getSources: () => invoke(IpcChannels.GetSources),
@@ -36,26 +37,26 @@ const electronAPI = {
 
   selectFolder: () => invoke(IpcChannels.SelectFolder),
 
-  // --- Phase2: 設定永続化 ---------------------------------------------
+  // --- Phase 2: settings persistence ----------------------------------
   loadSettings: () => invoke(IpcChannels.LoadSettings),
   saveSettings: (settings: AppSettings) => invoke(IpcChannels.SaveSettings, settings),
 
-  // --- Phase2: 録画履歴 ---------------------------------------------------
+  // --- Phase 2: recording history ---------------------------------------
   getRecordingHistory: () => invoke(IpcChannels.GetRecordingHistory),
   deleteRecordingHistoryItem: (id: string) =>
     invoke(IpcChannels.DeleteRecordingHistoryItem, { id }),
   openFileLocation: (filePath: string) => invoke(IpcChannels.OpenFileLocation, { filePath }),
 
-  // --- Phase2: プラットフォーム情報・権限 ---------------------------------
+  // --- Phase 2: platform info / permissions ------------------------------
   getPlatformCapabilities: () => invoke(IpcChannels.GetPlatformCapabilities),
   requestMicrophonePermission: () => invoke(IpcChannels.RequestMicrophonePermission),
 
-  // --- Phase3: MP4変換(FFmpeg)の進捗通知 -----------------------------------
+  // --- Phase 3: MP4 conversion (FFmpeg) progress notifications -----------------------
   /**
-   * mainプロセスから送られる変換進捗イベントを購読する。
-   * `ipcRenderer` をそのまま渡さず、ここでラップしたコールバックだけを公開することで
-   * renderer側が任意のIPCチャンネルを覗けないようにする(contextIsolationの意図を守る)。
-   * 戻り値の関数を呼ぶことでリスナーを解除できる。
+   * Subscribes to the conversion-progress event sent from the main process.
+   * Rather than passing `ipcRenderer` through directly, only this wrapped callback
+   * is exposed, so the renderer can't peek at arbitrary IPC channels (preserving
+   * the intent of contextIsolation). Call the returned function to unsubscribe.
    */
   onConversionProgress: (callback: (progress: ConversionProgress) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, progress: ConversionProgress): void => {
@@ -70,5 +71,5 @@ const electronAPI = {
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
 
-/** renderer側で `window.electronAPI` の型を補完するための型エクスポート */
+/** Type export used by the renderer to type window.electronAPI */
 export type ElectronAPI = typeof electronAPI;

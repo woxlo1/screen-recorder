@@ -1,11 +1,13 @@
 import ffmpeg from 'fluent-ffmpeg';
 import fs from 'node:fs';
-import type { VideoCodec } from '../shared/types';
+import type { SupportedLanguage, VideoCodec } from '../shared/types';
 import { resolveFfmpegPath, isFfmpegAvailable } from './ffmpeg-binary';
+import { mt } from './messages';
 
 /**
- * fluent-ffmpeg に同梱バイナリのパスを一度だけ設定する。
- * モジュール読み込み時に実行することで、以後のconvert呼び出しで毎回設定する必要がなくなる。
+ * Configures fluent-ffmpeg with the bundled binary path exactly once.
+ * Running this at module load time means subsequent convert calls don't
+ * need to configure it again.
  */
 let ffmpegConfigured = false;
 function ensureFfmpegConfigured(): void {
@@ -16,7 +18,7 @@ function ensureFfmpegConfigured(): void {
   ffmpegConfigured = true;
 }
 
-/** コーデックごとのFFmpegエンコーダ名・推奨オプションのマッピング */
+/** Mapping of FFmpeg encoder name / recommended options per codec */
 const CODEC_PRESETS: Record<VideoCodec, { videoCodec: string; outputOptions: string[] }> = {
   h264: {
     videoCodec: 'libx264',
@@ -24,8 +26,9 @@ const CODEC_PRESETS: Record<VideoCodec, { videoCodec: string; outputOptions: str
   },
   h265: {
     videoCodec: 'libx265',
-    // libx265はlibx264よりエンコードが遅いため、preset/CRTなどデフォルトに任せつつ
-    // -tag:v hvc1 を付けることでmacOSのQuickTime/Finderでもサムネイル・再生互換性を確保する。
+    // libx265 encodes more slowly than libx264, so we mostly leave preset/CRF at their
+    // defaults, but add -tag:v hvc1 to ensure thumbnail/playback compatibility with
+    // QuickTime/Finder on macOS.
     outputOptions: ['-preset', 'fast', '-pix_fmt', 'yuv420p', '-tag:v', 'hvc1'],
   },
 };
@@ -34,10 +37,12 @@ export interface ConvertOptions {
   inputPath: string;
   outputPath: string;
   videoCodec: VideoCodec;
-  /** 映像ビットレート(bps)。指定が無い場合はFFmpegのCRT既定品質に任せる */
+  /** Video bitrate (bps). If not specified, FFmpeg's default CRT-equivalent quality is used. */
   bitrate?: number;
-  /** 進捗(0-100)を都度通知するコールバック。FFmpegが算出できない場合は呼ばれないことがある */
+  /** Callback invoked with progress (0-100) as it updates. May not be called if FFmpeg can't compute it. */
   onProgress?: (percent: number) => void;
+  /** UI language, used to localize any error message produced during conversion. */
+  language: SupportedLanguage;
 }
 
 export class FfmpegConversionError extends Error {
@@ -51,30 +56,29 @@ export class FfmpegConversionError extends Error {
 }
 
 /**
- * WebM(VP8/VP9 + Opus) を MP4(H264/H265 + AAC) へ変換する。
+ * Converts WebM (VP8/VP9 + Opus) to MP4 (H264/H265 + AAC).
  *
- * 設計メモ:
- *  - 入力は MediaRecorder が生成した WebM ファイル（renderer→stopRecordingで一時保存済み）。
- *  - 音声はAAC固定（MP4コンテナの標準的な音声コーデックであり、対応プレイヤーが最も広い）。
- *  - 進捗はFFmpegの `progress` イベントの `percent` を利用する。
- *    WebM入力では総時間(duration)の取得精度が低く percent が undefined になることがあるため、
- *    その場合は呼び出し元に「不明だが進行中」であることが伝わるよう onProgress を呼ばない設計にしている。
+ * Design notes:
+ *  - The input is the WebM file produced by MediaRecorder (already saved temporarily
+ *    by renderer -> stopRecording).
+ *  - Audio is fixed to AAC (the standard audio codec for MP4 containers, with the
+ *    widest player support).
+ *  - Progress is reported using FFmpeg's `progress` event's `percent` field.
+ *    For WebM input, duration detection accuracy is low and `percent` can be undefined,
+ *    in which case onProgress is intentionally not called so the caller can tell that
+ *    progress is "unknown but still in progress".
  */
 export function convertWebmToMp4(options: ConvertOptions): Promise<void> {
   ensureFfmpegConfigured();
 
   return new Promise((resolve, reject) => {
     if (!isFfmpegAvailable()) {
-      reject(
-        new FfmpegConversionError(
-          'FFmpegの実行ファイルが見つかりません。アプリの再インストールをお試しください。',
-        ),
-      );
+      reject(new FfmpegConversionError(mt(options.language, 'ffmpegMissingReinstallHint')));
       return;
     }
 
     if (!fs.existsSync(options.inputPath)) {
-      reject(new FfmpegConversionError('変換元の録画ファイルが見つかりません。'));
+      reject(new FfmpegConversionError(mt(options.language, 'sourceFileNotFound')));
       return;
     }
 
@@ -88,7 +92,7 @@ export function convertWebmToMp4(options: ConvertOptions): Promise<void> {
       .format('mp4');
 
     if (options.bitrate) {
-      // ビットレート指定。bps → kbpsへ変換してfluent-ffmpegに渡す。
+      // Bitrate is specified in bps; convert to kbps for fluent-ffmpeg.
       command.videoBitrate(Math.round(options.bitrate / 1000));
     }
 
@@ -101,7 +105,7 @@ export function convertWebmToMp4(options: ConvertOptions): Promise<void> {
       })
       .on('error', (error) => {
         console.error('[ffmpeg] conversion failed', error);
-        reject(new FfmpegConversionError(toFriendlyFfmpegError(error), error));
+        reject(new FfmpegConversionError(toFriendlyFfmpegError(error, options.language), error));
       })
       .on('end', () => {
         resolve();
@@ -110,20 +114,20 @@ export function convertWebmToMp4(options: ConvertOptions): Promise<void> {
   });
 }
 
-/** FFmpegが返す英語の生エラーメッセージを、よくあるケースだけ日本語化する */
-function toFriendlyFfmpegError(error: Error): string {
+/** Localizes FFmpeg's raw English error messages for a handful of common cases. */
+function toFriendlyFfmpegError(error: Error, language: SupportedLanguage): string {
   const msg = error.message.toLowerCase();
   if (msg.includes('enoent')) {
-    return 'FFmpegの実行ファイルが見つかりませんでした。';
+    return mt(language, 'ffmpegEnoent');
   }
   if (msg.includes('invalid data') || msg.includes('moov atom not found')) {
-    return '録画データの読み込みに失敗しました（ファイルが破損している可能性があります）。';
+    return mt(language, 'ffmpegInvalidData');
   }
   if (msg.includes('no space left')) {
-    return '保存先ディスクの空き容量が不足しています。';
+    return mt(language, 'ffmpegNoSpace');
   }
   if (msg.includes('permission denied') || msg.includes('eacces')) {
-    return '保存先フォルダへの書き込み権限がありません。';
+    return mt(language, 'ffmpegPermissionDenied');
   }
-  return `MP4変換に失敗しました: ${error.message}`;
+  return mt(language, 'ffmpegGenericFailure', { message: error.message });
 }

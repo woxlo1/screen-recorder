@@ -1,6 +1,8 @@
+import { translate } from '../../i18n';
+
 /**
- * ブラウザ標準のMediaRecorder APIをラップし、
- * 録画機能(feature)からはシンプルなメソッド呼び出しだけで使えるようにする。
+ * Wraps the browser's standard MediaRecorder API so the recorder feature can use
+ * it via simple method calls.
  */
 export class MediaRecorderController {
   private recorder: MediaRecorder | null = null;
@@ -8,15 +10,17 @@ export class MediaRecorderController {
   private startTimestamp = 0;
 
   /**
-   * 指定のストリームを使って録画を開始する。
-   * onUnexpectedStop は、停止操作をしていないのにMediaRecorderが録画を止めてしまった場合
-   * (OS側のキャプチャ異常などでトラックが`ended`になった場合等)に呼ばれる。
+   * Starts recording using the given stream.
+   * onUnexpectedStop is called when MediaRecorder stops recording on its own
+   * without a stop operation being requested (e.g. when a track becomes `ended`
+   * due to an OS-level capture failure).
    */
   start(stream: MediaStream, bitrate: number, onUnexpectedStop?: (reason: string) => void): void {
     this.chunks = [];
 
-    // VP9はWebMコンテナで高画質・高圧縮率のため既定コーデックとして採用。
-    // ブラウザがサポートしていない場合は自動でデフォルトにフォールバックする。
+    // VP9 is adopted as the default codec for its high quality and compression ratio
+    // within a WebM container. Falls back to the default automatically if the
+    // browser doesn't support it.
     const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
       ? 'video/webm;codecs=vp9'
       : 'video/webm';
@@ -32,29 +36,30 @@ export class MediaRecorderController {
       }
     };
 
-    // MediaRecorder自体がエラーで停止した場合(エンコード失敗等)を検知する。
-    // ハンドリングしないと、エラーが握り潰されたままUIが固まって見える原因になる。
+    // Detects MediaRecorder itself stopping due to an error (e.g. an encoding failure).
+    // Without handling this, the error would be silently swallowed while the UI appears
+    // frozen.
     this.recorder.onerror = (event: Event) => {
-      const message = 'error' in event ? String((event as ErrorEvent).error) : '不明なエラー';
+      const message =
+        'error' in event ? String((event as ErrorEvent).error) : translate('errors.unknown');
       console.error('[MediaRecorder] error', message);
-      onUnexpectedStop?.(`録画エンジンでエラーが発生しました: ${message}`);
+      onUnexpectedStop?.(translate('errors.recorderEngineError', { message }));
     };
 
-    // 映像トラックがOS側のキャプチャ異常(例: Windows Graphics Captureのフレーム取得失敗が
-    // 続いた場合)で途中終了した場合に検知する。これを監視しないと、録画は内部的に
-    // 止まっているのにUIだけが「録画中」のまま固まって見える(画面が白くなる現象の一因)。
+    // Detects when the video track ends prematurely due to an OS-level capture failure
+    // (e.g. repeated frame-acquisition failures in Windows Graphics Capture). Without
+    // monitoring this, the recording would have internally stopped while the UI still
+    // shows "recording" (one cause of the screen turning white).
     stream.getVideoTracks().forEach((track) => {
       track.addEventListener('ended', () => {
         if (this.recorder?.state === 'recording' || this.recorder?.state === 'paused') {
-          onUnexpectedStop?.(
-            '画面キャプチャが予期せず終了しました(OS側のキャプチャ機能の不調が考えられます)。',
-          );
+          onUnexpectedStop?.(translate('errors.captureEndedUnexpectedly'));
         }
       });
     });
 
     this.startTimestamp = Date.now();
-    // 1秒ごとにチャンクを切り出す。長時間録画でもメモリに優しい。
+    // Emit a chunk every second. Keeps memory usage manageable even for long recordings.
     this.recorder.start(1000);
   }
 
@@ -71,14 +76,14 @@ export class MediaRecorderController {
   }
 
   /**
-   * 録画を停止し、結合済みのBlobと録画時間(ms)を返す。
-   * MediaRecorder.stop()は非同期にdataavailable/stopイベントを発火するため、
-   * Promiseでラップして完了を待つ。
+   * Stops the recording and returns the combined Blob and recording duration (ms).
+   * Since MediaRecorder.stop() fires the dataavailable/stop events asynchronously,
+   * this wraps it in a Promise to await completion.
    */
   stop(): Promise<{ blob: Blob; durationMs: number }> {
     return new Promise((resolve, reject) => {
       if (!this.recorder) {
-        reject(new Error('録画が開始されていません'));
+        reject(new Error(translate('errors.notRecording')));
         return;
       }
 

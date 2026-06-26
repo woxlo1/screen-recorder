@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useRecorderStore } from '../../store/recorderStore';
+import { useTranslation } from '../../i18n';
 
 /**
- * desktopCapturerから取得したソース一覧をサムネイル付きで表示し、
- * ユーザーが録画対象（デスクトップ全体 or 特定ウィンドウ）を選べるようにする。
+ * Displays the list of sources retrieved from desktopCapturer with thumbnails,
+ * letting the user choose what to record (the entire desktop or a specific window).
  */
 export function SourceSelector() {
+  const { t } = useTranslation();
   const availableSources = useRecorderStore((s) => s.availableSources);
   const selectedSource = useRecorderStore((s) => s.selectedSource);
   const setAvailableSources = useRecorderStore((s) => s.setAvailableSources);
@@ -17,7 +19,7 @@ export function SourceSelector() {
     try {
       const sources = await window.electronAPI.getSources();
       setAvailableSources(sources);
-      // 初回ロード時、まだ何も選択されていなければ最初の画面を自動選択
+      // On first load, if nothing is selected yet, automatically select the first screen
       if (!selectedSource && sources.length > 0) {
         setSelectedSource(sources[0] ?? null);
       }
@@ -28,7 +30,7 @@ export function SourceSelector() {
 
   useEffect(() => {
     void refreshSources();
-    // マウント時のみ実行
+    // Run only on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -38,25 +40,25 @@ export function SourceSelector() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-200">録画対象</h3>
+        <h3 className="text-sm font-semibold text-gray-200">{t('sourceSelector.title')}</h3>
         <button
           type="button"
           onClick={() => void refreshSources()}
           className="text-xs text-blue-400 hover:text-blue-300"
           disabled={loading}
         >
-          {loading ? '更新中…' : '再読み込み'}
+          {loading ? t('sourceSelector.refreshing') : t('sourceSelector.refresh')}
         </button>
       </div>
 
       <SourceGroup
-        title="デスクトップ"
+        title={t('sourceSelector.desktopGroup')}
         sources={screens}
         selectedId={selectedSource?.id}
         onSelect={setSelectedSource}
       />
       <SourceGroup
-        title="ウィンドウ"
+        title={t('sourceSelector.windowGroup')}
         sources={windows}
         selectedId={selectedSource?.id}
         onSelect={setSelectedSource}

@@ -3,8 +3,9 @@ import path from 'node:path';
 import fs from 'node:fs';
 
 /**
- * 録画完了直後の一時WebMファイルを置くディレクトリ。
- * アプリの userData 配下に作ることで、OSの一時フォルダ掃除等の影響を受けにくくする。
+ * Directory for the temporary WebM file produced right after a recording finishes.
+ * Placing it under the app's userData directory makes it less likely to be affected
+ * by OS temp-folder cleanup.
  */
 export function getTempRecordingDir(): string {
   const dir = path.join(app.getPath('userData'), 'temp-recordings');
@@ -14,7 +15,7 @@ export function getTempRecordingDir(): string {
   return dir;
 }
 
-/** デフォルトの保存先（Windowsの「ビデオ」フォルダ配下に専用フォルダを作る） */
+/** Default output destination (creates a dedicated folder under Windows' "Videos" folder) */
 export function getDefaultOutputDir(): string {
   const dir = path.join(app.getPath('videos'), 'ScreenRecorder');
   if (!fs.existsSync(dir)) {
@@ -23,13 +24,13 @@ export function getDefaultOutputDir(): string {
   return dir;
 }
 
-/** 一時ファイル用のユニークなファイルパスを生成する */
+/** Generates a unique file path for a temporary file */
 export function createTempFilePath(extension: 'webm'): string {
   const fileName = `rec-${Date.now()}.${extension}`;
   return path.join(getTempRecordingDir(), fileName);
 }
 
-/** ファイルサイズ(バイト)を取得する。失敗時はundefinedを返す(履歴表示はベストエフォート) */
+/** Gets the file size (bytes). Returns undefined on failure (history display is best-effort) */
 export function getFileSizeSafe(filePath: string): number | undefined {
   try {
     return fs.statSync(filePath).size;

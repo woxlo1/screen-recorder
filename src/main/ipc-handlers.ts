@@ -20,21 +20,22 @@ import { persistentStore } from './persistent-store';
 import { getPlatformCapabilities, requestMicrophonePermission } from './permissions';
 import { convertWebmToMp4, FfmpegConversionError } from './ffmpeg-converter';
 import { isFfmpegAvailable } from './ffmpeg-binary';
+import { mt } from './messages';
 
-/** AppError生成のヘルパー。catchしたunknownを安全にAppErrorへ変換する */
+/** Helper for building an AppError. Safely converts a caught `unknown` into an AppError. */
 function toAppError(code: AppError['code'], error: unknown): AppError {
   const message = error instanceof Error ? error.message : String(error);
   const details = error instanceof Error ? error.stack : undefined;
-  // exactOptionalPropertyTypes対応: detailsが無い場合はプロパティ自体を省略する
+  // exactOptionalPropertyTypes: omit the property entirely when there are no details
   return { code, message, ...(details !== undefined ? { details } : {}) };
 }
 
 /**
- * すべてのIPCハンドラをここで一括登録する。
- * main/index.ts から一度だけ呼び出す。
+ * Registers every IPC handler in one place.
+ * Called exactly once from main/index.ts.
  */
 export function registerIpcHandlers(): void {
-  // --- ソース一覧取得 -------------------------------------------------
+  // --- Get the list of sources ----------------------------------------
   ipcMain.handle(IpcChannels.GetSources, async () => {
     try {
       return await listCaptureSources();
@@ -44,33 +45,36 @@ export function registerIpcHandlers(): void {
     }
   });
 
-  // --- 録画開始(状態管理のみ。実キャプチャはrenderer側) -----------------
+  // --- Start recording (state tracking only; actual capture happens in renderer) ---
   ipcMain.handle(IpcChannels.StartRecording, async (_event, payload: StartRecordingRequest) => {
+    const language = persistentStore.getSettings().language;
     if (recordingStateManager.isActive()) {
-      return { success: false, errorMessage: '既に録画中です' };
+      return { success: false, errorMessage: mt(language, 'alreadyRecording') };
     }
-    // selectedSourceId / systemAudioRequested は
-    // session.setDisplayMediaRequestHandler (main/index.ts) が参照する。
-    // displayMediaRequestHandlerはOSのピッカーを介さず、ここで記録した
-    // ソースIDとループバック音声要否に基づいて自動的に応答を返す。
+    // selectedSourceId / systemAudioRequested are read by
+    // session.setDisplayMediaRequestHandler (main/index.ts).
+    // The displayMediaRequestHandler bypasses the OS picker and automatically responds
+    // based on the source ID and loopback-audio flag recorded here.
     recordingStateManager.start(payload.source.id, payload.audio.systemAudioEnabled);
     return { success: true };
   });
 
-  // --- 録画停止 → WebMファイルへの書き込み -----------------------------
+  // --- Stop recording -> write the WebM file ----------------------------
   ipcMain.handle(
     IpcChannels.StopRecording,
     async (
       _event,
       payload: { buffer: ArrayBuffer; durationMs: number },
     ): Promise<StopRecordingResult> => {
+      const language = persistentStore.getSettings().language;
       if (!recordingStateManager.isActive()) {
-        throw toAppError('RECORDING_NOT_ACTIVE', new Error('録画が開始されていません'));
+        throw toAppError('RECORDING_NOT_ACTIVE', new Error(mt(language, 'recordingNotStarted')));
       }
       recordingStateManager.stop();
 
-      // バッファが空の場合は「録画中に予期せず中断した際、mainプロセスの状態だけを
-      // 同期するための呼び出し」とみなし、無意味な0バイトファイルの書き込みをスキップする。
+      // If the buffer is empty, treat this as "a call made purely to resync the main
+      // process's state after an unexpected mid-recording interruption" and skip
+      // writing a meaningless 0-byte file.
       if (payload.buffer.byteLength === 0) {
         return { tempFilePath: '', durationMs: payload.durationMs };
       }
@@ -86,7 +90,7 @@ export function registerIpcHandlers(): void {
     },
   );
 
-  // --- 一時停止 / 再開 ---------------------------------------------------
+  // --- Pause / resume -----------------------------------------------------
   ipcMain.handle(IpcChannels.PauseRecording, async () => {
     recordingStateManager.pause();
     return { success: true };
@@ -97,10 +101,12 @@ export function registerIpcHandlers(): void {
     return { success: true };
   });
 
-  // --- 動画の最終保存（webmはコピー、mp4はFFmpegで変換してから保存） -------
+  // --- Final save of the video (webm is copied as-is; mp4 is converted via FFmpeg first) ---
   ipcMain.handle(
     IpcChannels.SaveVideo,
     async (event, request: SaveVideoRequest): Promise<SaveVideoResult> => {
+      const language = persistentStore.getSettings().language;
+
       const sendProgress = (progress: ConversionProgress): void => {
         if (!event.sender.isDestroyed()) {
           event.sender.send(IpcEvents.ConversionProgress, progress);
@@ -112,7 +118,7 @@ export function registerIpcHandlers(): void {
 
         await fs.mkdir(request.save.outputDirectory, { recursive: true });
 
-        // ファイル名にタイムスタンプを付与し、前回の録画ファイルが上書きされないようにする
+        // Append a timestamp to the file name so a previous recording is never overwritten.
         const destPath = await buildUniqueOutputPath(
           request.save.outputDirectory,
           request.save.fileNameTemplate,
@@ -123,7 +129,7 @@ export function registerIpcHandlers(): void {
           if (!isFfmpegAvailable()) {
             const appError = toAppError(
               'FFMPEG_NOT_AVAILABLE',
-              new Error('FFmpegの実行ファイルが見つかりません'),
+              new Error(mt(language, 'ffmpegNotFound')),
             );
             sendProgress({ requestId: request.requestId, phase: 'failed' });
             return { success: false, errorMessage: appError.message };
@@ -136,7 +142,9 @@ export function registerIpcHandlers(): void {
               inputPath: request.sourceFilePath,
               outputPath: destPath,
               videoCodec: request.save.videoCodec,
-              // bitrateは指定しない: WebM録画時のビットレートをFFmpeg側のCRF相当に任せ、画質の再劣化を避ける
+              language,
+              // bitrate intentionally left unspecified: let FFmpeg's CRF-equivalent quality
+              // follow the WebM recording's own bitrate, avoiding re-degradation of quality.
               onProgress: (percent) => {
                 sendProgress({ requestId: request.requestId, phase: 'converting', percent });
               },
@@ -153,13 +161,14 @@ export function registerIpcHandlers(): void {
 
           sendProgress({ requestId: request.requestId, phase: 'completed', percent: 100 });
 
-          // 変換が完了したら元のWebM一時ファイルは不要なので削除する(ベストエフォート)
+          // The original temporary WebM file is no longer needed once conversion succeeds;
+          // delete it on a best-effort basis.
           await fs.unlink(request.sourceFilePath).catch(() => undefined);
         } else {
           await fs.copyFile(request.sourceFilePath, destPath);
         }
 
-        // 履歴に追記（保存失敗時は記録しない）
+        // Append to history (not recorded if the save failed)
         const fileSizeBytes = getFileSizeSafe(destPath);
         persistentStore.addHistoryItem({
           id: crypto.randomUUID(),
@@ -168,7 +177,7 @@ export function registerIpcHandlers(): void {
           format: request.save.format,
           durationMs: request.durationMs,
           createdAt: Date.now(),
-          // exactOptionalPropertyTypes対応: 取得できなかった場合はプロパティ自体を省略する
+          // exactOptionalPropertyTypes: omit the property entirely if it couldn't be retrieved
           ...(fileSizeBytes !== undefined ? { fileSizeBytes } : {}),
         });
 
@@ -182,15 +191,16 @@ export function registerIpcHandlers(): void {
     },
   );
 
-  // --- 保存先フォルダ選択 -------------------------------------------------
+  // --- Output folder selection -------------------------------------------
   ipcMain.handle(IpcChannels.SelectFolder, async (event): Promise<SelectFolderResult> => {
+    const language = persistentStore.getSettings().language;
     const window = BrowserWindow.fromWebContents(event.sender);
     const dialogOptions: Electron.OpenDialogOptions = {
       properties: ['openDirectory', 'createDirectory'],
-      title: '保存先フォルダを選択',
+      title: mt(language, 'selectFolderDialogTitle'),
     };
-    // showOpenDialogはBrowserWindowを渡す/渡さないでオーバーロードが分かれるため、
-    // window が取れない(=undefined)場合は引数自体を渡さない形で呼び分ける。
+    // showOpenDialog has separate overloads depending on whether a BrowserWindow is passed,
+    // so when we can't obtain one (undefined), we call without passing that argument at all.
     const result = window
       ? await dialog.showOpenDialog(window, dialogOptions)
       : await dialog.showOpenDialog(dialogOptions);
@@ -200,11 +210,11 @@ export function registerIpcHandlers(): void {
     }
 
     const folderPath = result.filePaths[0];
-    // exactOptionalPropertyTypes対応: folderPathが無い場合はプロパティ自体を省略する
+    // exactOptionalPropertyTypes: omit the property entirely if folderPath is missing
     return folderPath !== undefined ? { canceled: false, folderPath } : { canceled: true };
   });
 
-  // --- 設定の読み込み/保存（userData配下のJSONに永続化） -----------------
+  // --- Load/save settings (persisted as JSON under userData) -------------
   ipcMain.handle(IpcChannels.LoadSettings, async (): Promise<AppSettings> => {
     return persistentStore.getSettings();
   });
@@ -214,7 +224,7 @@ export function registerIpcHandlers(): void {
     return { success: true };
   });
 
-  // --- 録画履歴 -----------------------------------------------------------
+  // --- Recording history ----------------------------------------------------
   ipcMain.handle(IpcChannels.GetRecordingHistory, async () => {
     return persistentStore.getHistory();
   });
@@ -229,7 +239,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IpcChannels.OpenFileLocation, async (_event, payload: { filePath: string }) => {
     try {
-      // ファイルをOS標準のファイラーで選択状態にして開く(Windows: Explorer / mac: Finder)
+      // Open the OS's standard file manager with the file pre-selected (Explorer on Windows / Finder on macOS)
       shell.showItemInFolder(payload.filePath);
       return { success: true };
     } catch (error) {
@@ -238,7 +248,7 @@ export function registerIpcHandlers(): void {
     }
   });
 
-  // --- プラットフォーム情報・権限 -----------------------------------------
+  // --- Platform info / permissions ----------------------------------------
   ipcMain.handle(IpcChannels.GetPlatformCapabilities, async () => {
     return getPlatformCapabilities();
   });
@@ -249,13 +259,13 @@ export function registerIpcHandlers(): void {
   });
 }
 
-/** ファイル名に使えない文字を除去する簡易サニタイズ */
+/** Simple sanitizer that strips characters not allowed in file names */
 function sanitizeFileName(name: string): string {
   const trimmed = name.trim() || 'recording';
   return trimmed.replace(/[\\/:*?"<>|]/g, '_');
 }
 
-/** ファイル名に使える形式のタイムスタンプ文字列 (例: 2024-06-01_21-30-15) を生成する */
+/** Generates a timestamp string usable in a file name (e.g. 2024-06-01_21-30-15) */
 function formatTimestampForFileName(date: Date): string {
   const pad = (n: number): string => String(n).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}_${pad(
@@ -264,9 +274,10 @@ function formatTimestampForFileName(date: Date): string {
 }
 
 /**
- * 保存先ディレクトリ内で重複しないファイルパスを生成する。
- * テンプレート名に日時を付与することで、同じテンプレート名でも毎回別ファイルとして保存され、
- * 過去の録画が上書き・消失することを防ぐ。万一それでも衝突する場合は連番を付与する。
+ * Generates a file path that doesn't collide with anything in the output directory.
+ * Appending a timestamp to the template name means every save with the same template
+ * name becomes a distinct file, preventing past recordings from being overwritten or
+ * lost. If a collision still occurs, a numeric suffix is appended as well.
  */
 async function buildUniqueOutputPath(
   outputDirectory: string,

@@ -2,21 +2,22 @@ import type { CaptureSource, RecordingQualitySettings } from '../../../shared/ty
 import { RESOLUTION_MAP } from '../../../shared/types';
 
 /**
- * 画面/ウィンドウの映像ストリームと、必要であればシステム音声(ループバック)を
- * 1回の getDisplayMedia 呼び出しでまとめて取得する。
+ * Acquires the screen/window video stream and, if needed, system audio (loopback)
+ * together in a single getDisplayMedia call.
  *
- * どのソースを録画するか・システム音声を含めるかは、事前に
- * window.electronAPI.startRecording() で main プロセスに伝えてあり、
- * main側の session.setDisplayMediaRequestHandler (src/main/index.ts) が
- * それを見て自動的に応答するため、ここではOSのピッカーは表示されない。
+ * Which source to record and whether to include system audio is decided ahead of
+ * time via window.electronAPI.startRecording(), and main's
+ * session.setDisplayMediaRequestHandler (src/main/index.ts) reads that and
+ * responds automatically, so the OS picker is never shown here.
  *
- * 旧実装は映像用と音声用で getUserMedia を2回(chromeMediaSource:'desktop' の
- * mandatory制約)に分けて呼んでおり、これが録画画面が真っ白になる不具合の原因
- * だった。映像+音声を1回のリクエストにまとめることでこの不具合を回避する。
+ * The old implementation called getUserMedia twice -- once for video and once for
+ * audio (both using the chromeMediaSource:'desktop' mandatory constraint) -- and
+ * that was the cause of the bug where the recording screen turned completely
+ * white. Combining video + audio into a single request avoids that bug.
  *
- * 解像度・FPSは「希望値」として渡す。実際のキャプチャ解像度は元のディスプレイ
- * 解像度に依存するため、ここで指定した値が必ず適用される保証はない
- * （ブラウザ/OSの実装依存）。
+ * Resolution/FPS are passed as "desired" values. Since the actual capture
+ * resolution depends on the underlying display resolution, there's no guarantee
+ * the values specified here are always honored exactly (it's browser/OS dependent).
  */
 export async function getDisplayCaptureStream(
   quality: RecordingQualitySettings,
@@ -30,13 +31,14 @@ export async function getDisplayCaptureStream(
       height: { ideal: height },
       frameRate: { ideal: quality.fps, max: quality.fps },
     },
-    // includeSystemAudioがfalseの場合、main側のハンドラはaudioトラックを
-    // 含めずに応答するため、audio: true を渡してもマイク音声が紛れ込むことはない。
+    // When includeSystemAudio is false, main's handler responds without including
+    // an audio track, so passing audio: true here can't accidentally pick up
+    // microphone audio.
     audio: includeSystemAudio,
   });
 }
 
-/** マイク音声ストリームを取得する */
+/** Acquires the microphone audio stream */
 export async function getMicrophoneStream(deviceId?: string): Promise<MediaStream> {
   return navigator.mediaDevices.getUserMedia({
     audio: deviceId ? { deviceId: { exact: deviceId } } : true,
@@ -45,9 +47,9 @@ export async function getMicrophoneStream(deviceId?: string): Promise<MediaStrea
 }
 
 /**
- * 映像ストリームと（任意の）音声ストリーム群を1つのMediaStreamに合成する。
- * MediaRecorderは複数トラックを含む単一のMediaStreamを渡すことで
- * 映像・音声を同時に録画できる。
+ * Combines a video stream and a (possibly empty) set of audio streams into a
+ * single MediaStream. MediaRecorder can record video and audio simultaneously
+ * by being given a single MediaStream that contains multiple tracks.
  */
 export function combineStreams(video: MediaStream, audioStreams: MediaStream[]): MediaStream {
   const combined = new MediaStream();
@@ -59,10 +61,10 @@ export function combineStreams(video: MediaStream, audioStreams: MediaStream[]):
   return combined;
 }
 
-/** ストリーム内のすべてのトラックを停止する（メモリリーク防止） */
+/** Stops every track in a stream (prevents memory leaks) */
 export function stopStream(stream: MediaStream | null | undefined): void {
   stream?.getTracks().forEach((track) => track.stop());
 }
 
-/** 型エクスポート用(他モジュールがCaptureSourceを参照する際に再利用しやすくする) */
+/** Type export for convenience (so other modules referencing CaptureSource can reuse this one) */
 export type { CaptureSource };

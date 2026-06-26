@@ -7,36 +7,38 @@ import type {
   PlatformCapabilities,
   RecordingHistoryItem,
   RecordingStatus,
+  SupportedLanguage,
 } from '../../shared/types';
 import { DEFAULT_APP_SETTINGS } from '../../shared/types';
 
 interface RecorderState {
-  /** 録画の進行状態 */
+  /** Recording progress state */
   status: RecordingStatus;
-  /** 選択中のキャプチャソース */
+  /** Currently selected capture source */
   selectedSource: CaptureSource | null;
-  /** 取得済みのキャプチャソース一覧 */
+  /** List of capture sources that have been fetched */
   availableSources: CaptureSource[];
-  /** 録画経過時間(ミリ秒)。プレビューのタイマー表示に利用 */
+  /** Elapsed recording time (ms). Used for the preview's timer display */
   elapsedMs: number;
-  /** 音声設定 */
+  /** Audio settings */
   audio: AudioSettings;
-  /** アプリ設定（品質・保存先） */
+  /** App settings (quality, output destination, language) */
   settings: AppSettings;
-  /** 設定の読み込みが完了したか(永続化データのロード待ち) */
+  /** Whether settings have finished loading (waiting on persisted data) */
   settingsLoaded: boolean;
-  /** プレビュー用のMediaStream（recorder featureがセットする） */
+  /** MediaStream used for the preview (set by the recorder feature) */
   previewStream: MediaStream | null;
-  /** OS判定・権限・機能制約の情報(macOSのシステム音声制約などに使う) */
+  /** OS detection / permissions / feature constraints (e.g. used for macOS system audio constraints) */
   platformCapabilities: PlatformCapabilities | null;
-  /** 録画履歴 */
+  /** Recording history */
   history: RecordingHistoryItem[];
-  /** MP4変換(FFmpeg)の進捗。変換中でない場合はnull */
+  /** MP4 conversion (FFmpeg) progress. null when no conversion is in progress */
   conversionProgress: ConversionProgress | null;
   /**
-   * 録画中に予期せず発生したエラー(OS側のキャプチャ異常など)。
-   * 録画操作自体の失敗(start/stop時のthrow)とは別に、録画中の非同期エラーを
-   * UIに伝えるためのチャンネル。nullの場合はエラーなし。
+   * An error that occurred unexpectedly during recording (e.g. an OS-level capture
+   * failure). A separate channel from start/stop throwing on direct operation
+   * failure, used to surface async errors that happen mid-recording to the UI.
+   * null means there is no error.
    */
   recordingError: string | null;
 
@@ -48,6 +50,7 @@ interface RecorderState {
   setAudioSettings: (audio: Partial<AudioSettings>) => void;
   setQualitySettings: (quality: Partial<AppSettings['quality']>) => void;
   setSaveSettings: (save: Partial<AppSettings['save']>) => void;
+  setLanguage: (language: SupportedLanguage) => void;
   setPreviewStream: (stream: MediaStream | null) => void;
   setSettings: (settings: AppSettings) => void;
   setSettingsLoaded: (loaded: boolean) => void;
@@ -95,6 +98,11 @@ export const useRecorderStore = create<RecorderState>((set) => ({
       settings: { ...state.settings, save: { ...state.settings.save, ...save } },
     })),
 
+  setLanguage: (language) =>
+    set((state) => ({
+      settings: { ...state.settings, language },
+    })),
+
   setPreviewStream: (stream) => set({ previewStream: stream }),
 
   setSettings: (settings) => set({ settings }),
@@ -104,7 +112,7 @@ export const useRecorderStore = create<RecorderState>((set) => ({
   setPlatformCapabilities: (info) =>
     set((state) => ({
       platformCapabilities: info,
-      // macOS等でシステム音声がサポート外の場合、ONになっていたら強制的にOFFにする
+      // Force system audio OFF if it was on but this OS doesn't support it
       audio: info.systemAudioLoopbackSupported
         ? state.audio
         : { ...state.audio, systemAudioEnabled: false },

@@ -3,8 +3,8 @@ import os from 'node:os';
 import type { MediaPermissionStatus, PlatformCapabilities } from '../shared/types';
 
 /**
- * macOSの systemPreferences.getMediaAccessStatus() の戻り値を
- * 共有の MediaPermissionStatus 型に正規化する。
+ * Normalizes the return value of macOS's systemPreferences.getMediaAccessStatus()
+ * into the shared MediaPermissionStatus type.
  */
 function normalizeStatus(status: string): MediaPermissionStatus {
   switch (status) {
@@ -22,10 +22,10 @@ function normalizeStatus(status: string): MediaPermissionStatus {
 }
 
 /**
- * macOSのDarwinカーネルバージョンから、ScreenCaptureKitベースの
- * システム音声ループバック(Electron `audio: 'loopback'`)が利用可能な
- * macOS 13(Ventura)以降かどうかを判定する。
- * macOS 13 = Darwin 22。 (例: macOS 14 Sonoma = Darwin 23)
+ * Determines, from the macOS Darwin kernel version, whether this is macOS 13
+ * (Ventura) or later, where ScreenCaptureKit-based system audio loopback
+ * (Electron's `audio: 'loopback'`) is available.
+ * macOS 13 = Darwin 22. (e.g. macOS 14 Sonoma = Darwin 23)
  */
 function isSystemAudioLoopbackCapableMac(): boolean {
   const darwinMajorVersion = Number.parseInt(os.release().split('.')[0] ?? '0', 10);
@@ -33,17 +33,19 @@ function isSystemAudioLoopbackCapableMac(): boolean {
 }
 
 /**
- * 現在のOSと権限状態をまとめて取得する。
- * Windowsには「画面録画の事前許可」という概念が無いため常に granted を返し、
- * システム音声ループバックも常にサポート対象として扱う。
+ * Gets the current OS and permission status together.
+ * Windows has no concept of "pre-approving screen recording", so it always returns
+ * granted, and system audio loopback is also always treated as supported.
  *
- * macOSでは:
- *  - 画面録画・マイクともにユーザーが手動で許可する必要がある
- *  - システム音声ループバック録音は、ElectronのネイティブAPI
- *    (`setDisplayMediaRequestHandler` の `audio: 'loopback'`)が
- *    macOS 13(Ventura)以降のScreenCaptureKitを利用して対応している。
- *    そのためBlackHole等の仮想オーディオデバイスは不要。
- *    macOS 12以前ではこのAPIが利用できないため非対応として扱う。
+ * On macOS:
+ *  - Both screen recording and microphone access require the user to grant
+ *    permission manually.
+ *  - System audio loopback recording is supported via Electron's native API
+ *    (`setDisplayMediaRequestHandler`'s `audio: 'loopback'`), which uses
+ *    ScreenCaptureKit on macOS 13 (Ventura) and later.
+ *    Because of this, a virtual audio device such as BlackHole is not required.
+ *    This API is unavailable on macOS 12 and earlier, so those versions are
+ *    treated as unsupported.
  */
 export function getPlatformCapabilities(): PlatformCapabilities {
   if (process.platform === 'darwin') {
@@ -64,7 +66,7 @@ export function getPlatformCapabilities(): PlatformCapabilities {
     };
   }
 
-  // Linux等。基本機能は動作させつつ、システム音声は未保証として扱う。
+  // Linux, etc. Core functionality is allowed to run, but system audio is treated as unguaranteed.
   return {
     platform: 'linux',
     systemAudioLoopbackSupported: false,
@@ -74,8 +76,9 @@ export function getPlatformCapabilities(): PlatformCapabilities {
 }
 
 /**
- * macOSでマイク権限を明示的にリクエストする。
- * Windows/Linuxではリクエストの概念が無いため即座にtrueを返す。
+ * Explicitly requests microphone permission on macOS.
+ * On Windows/Linux there is no concept of requesting permission, so this
+ * immediately returns true.
  */
 export async function requestMicrophonePermission(): Promise<boolean> {
   if (process.platform !== 'darwin') return true;

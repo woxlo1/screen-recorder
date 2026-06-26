@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useRecorderStore } from '../../store/recorderStore';
+import { useTranslation } from '../../i18n';
 import type {
   OutputFormat,
   RecordingFps,
@@ -14,29 +15,44 @@ const RESOLUTION_OPTIONS: { value: ResolutionPreset; label: string }[] = [
   { value: '1440p', label: '1440p (2560x1440)' },
   { value: '4k', label: '4K (3840x2160)' },
 ];
-const FORMAT_OPTIONS: { value: OutputFormat; label: string; description: string }[] = [
-  { value: 'webm', label: 'WebM', description: '変換不要・即時保存。ファイルサイズは大きめ' },
-  { value: 'mp4', label: 'MP4', description: 'FFmpegで変換(時間がかかります)。互換性が高い' },
-];
-const CODEC_OPTIONS: { value: VideoCodec; label: string; description: string }[] = [
-  { value: 'h264', label: 'H.264', description: '互換性重視。再生・編集に広く対応(推奨)' },
-  {
-    value: 'h265',
-    label: 'H.265 (HEVC)',
-    description: '高圧縮・高画質。一部の環境で再生非対応な場合あり',
-  },
-];
 
 interface SettingsScreenProps {
   onClose: () => void;
 }
 
-/** 録画品質・保存先を設定するモーダル画面 */
+/** Modal screen for configuring recording quality and the output destination */
 export function SettingsScreen({ onClose }: SettingsScreenProps) {
+  const { t } = useTranslation();
   const settings = useRecorderStore((s) => s.settings);
   const setQualitySettings = useRecorderStore((s) => s.setQualitySettings);
   const setSaveSettings = useRecorderStore((s) => s.setSaveSettings);
+  const setLanguage = useRecorderStore((s) => s.setLanguage);
   const [fileName, setFileName] = useState(settings.save.fileNameTemplate);
+
+  const FORMAT_OPTIONS: { value: OutputFormat; label: string; description: string }[] = [
+    {
+      value: 'webm',
+      label: t('settings.formatWebmLabel'),
+      description: t('settings.formatWebmDescription'),
+    },
+    {
+      value: 'mp4',
+      label: t('settings.formatMp4Label'),
+      description: t('settings.formatMp4Description'),
+    },
+  ];
+  const CODEC_OPTIONS: { value: VideoCodec; label: string; description: string }[] = [
+    {
+      value: 'h264',
+      label: t('settings.codecH264Label'),
+      description: t('settings.codecH264Description'),
+    },
+    {
+      value: 'h265',
+      label: t('settings.codecH265Label'),
+      description: t('settings.codecH265Description'),
+    },
+  ];
 
   const handleSelectFolder = async () => {
     const result = await window.electronAPI.selectFolder();
@@ -49,36 +65,69 @@ export function SettingsScreen({ onClose }: SettingsScreenProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="max-h-[85vh] w-[480px] overflow-y-auto rounded-lg bg-gray-900 p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-white">設定</h2>
+          <h2 className="text-lg font-bold text-white">{t('settings.title')}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white">
             ✕
           </button>
         </div>
 
         <div className="flex flex-col gap-5">
-          {/* 保存先 */}
+          {/* Language */}
           <section>
-            <label className="mb-1 block text-sm font-medium text-gray-300">保存先フォルダ</label>
+            <label className="mb-1 block text-sm font-medium text-gray-300">
+              {t('settings.language')}
+            </label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setLanguage('ja')}
+                className={`flex-1 rounded px-3 py-2 text-sm transition ${
+                  settings.language === 'ja'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                {t('settings.languageJapanese')}
+              </button>
+              <button
+                onClick={() => setLanguage('en')}
+                className={`flex-1 rounded px-3 py-2 text-sm transition ${
+                  settings.language === 'en'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                {t('settings.languageEnglish')}
+              </button>
+            </div>
+          </section>
+
+          {/* Output folder */}
+          <section>
+            <label className="mb-1 block text-sm font-medium text-gray-300">
+              {t('settings.outputFolder')}
+            </label>
             <div className="flex gap-2">
               <input
                 type="text"
                 readOnly
                 value={settings.save.outputDirectory}
-                placeholder="未設定"
+                placeholder={t('settings.notSet')}
                 className="flex-1 rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200"
               />
               <button
                 onClick={() => void handleSelectFolder()}
                 className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-500"
               >
-                選択
+                {t('settings.select')}
               </button>
             </div>
           </section>
 
-          {/* ファイル名 */}
+          {/* File name */}
           <section>
-            <label className="mb-1 block text-sm font-medium text-gray-300">ファイル名</label>
+            <label className="mb-1 block text-sm font-medium text-gray-300">
+              {t('settings.fileName')}
+            </label>
             <input
               type="text"
               value={fileName}
@@ -90,9 +139,11 @@ export function SettingsScreen({ onClose }: SettingsScreenProps) {
             />
           </section>
 
-          {/* 保存形式 */}
+          {/* Save format */}
           <section>
-            <label className="mb-1 block text-sm font-medium text-gray-300">保存形式</label>
+            <label className="mb-1 block text-sm font-medium text-gray-300">
+              {t('settings.saveFormat')}
+            </label>
             <div className="flex gap-2">
               {FORMAT_OPTIONS.map((opt) => (
                 <button
@@ -111,11 +162,11 @@ export function SettingsScreen({ onClose }: SettingsScreenProps) {
             </div>
           </section>
 
-          {/* コーデック(MP4選択時のみ表示) */}
+          {/* Codec (only shown when MP4 is selected) */}
           {settings.save.format === 'mp4' && (
             <section>
               <label className="mb-1 block text-sm font-medium text-gray-300">
-                映像コーデック (MP4)
+                {t('settings.videoCodec')}
               </label>
               <div className="flex gap-2">
                 {CODEC_OPTIONS.map((opt) => (
@@ -133,15 +184,15 @@ export function SettingsScreen({ onClose }: SettingsScreenProps) {
                   </button>
                 ))}
               </div>
-              <p className="mt-1 text-xs text-gray-500">
-                迷ったらH.264を選んでください。H.265はファイルサイズを抑えたい場合におすすめです。
-              </p>
+              <p className="mt-1 text-xs text-gray-500">{t('settings.codecHint')}</p>
             </section>
           )}
 
           {/* FPS */}
           <section>
-            <label className="mb-1 block text-sm font-medium text-gray-300">FPS</label>
+            <label className="mb-1 block text-sm font-medium text-gray-300">
+              {t('settings.fps')}
+            </label>
             <div className="flex gap-2">
               {FPS_OPTIONS.map((fps) => (
                 <button
@@ -159,9 +210,11 @@ export function SettingsScreen({ onClose }: SettingsScreenProps) {
             </div>
           </section>
 
-          {/* 解像度 */}
+          {/* Resolution */}
           <section>
-            <label className="mb-1 block text-sm font-medium text-gray-300">解像度</label>
+            <label className="mb-1 block text-sm font-medium text-gray-300">
+              {t('settings.resolution')}
+            </label>
             <select
               value={settings.quality.resolution}
               onChange={(e) =>
@@ -177,10 +230,10 @@ export function SettingsScreen({ onClose }: SettingsScreenProps) {
             </select>
           </section>
 
-          {/* ビットレート */}
+          {/* Bitrate */}
           <section>
             <label className="mb-1 block text-sm font-medium text-gray-300">
-              ビットレート: {(settings.quality.bitrate / 1_000_000).toFixed(1)} Mbps
+              {t('settings.bitrate', { value: (settings.quality.bitrate / 1_000_000).toFixed(1) })}
             </label>
             <input
               type="range"

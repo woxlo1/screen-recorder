@@ -34,8 +34,8 @@
     "entitlements": "build/entitlements.mac.plist",
     "entitlementsInherit": "build/entitlements.mac.plist",
     "extendInfo": {
-      "NSMicrophoneUsageDescription": "録画時にマイク音声を録音するために使用します。",
-      "NSCameraUsageDescription": "本アプリはカメラを使用しません。"
+      "NSMicrophoneUsageDescription": "Used to record microphone audio while recording.",
+      "NSCameraUsageDescription": "This app does not use the camera."
     }
   },
   "dmg": {

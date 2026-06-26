@@ -2,8 +2,8 @@ import { useEffect } from 'react';
 import { useRecorderStore } from '../store/recorderStore';
 
 /**
- * アプリ起動時に一度だけ実行され、main プロセス側に保存されている
- * 設定・履歴・OSのプラットフォーム情報をrendererのstoreへ反映する。
+ * Runs once on app startup, applying the settings/history/OS platform info
+ * persisted on the main process side into the renderer store.
  */
 export function useAppBootstrap(): void {
   const setSettings = useRecorderStore((s) => s.setSettings);
@@ -33,15 +33,16 @@ export function useAppBootstrap(): void {
     return () => {
       cancelled = true;
     };
-    // マウント時のみ実行
+    // Run only on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 }
 
 /**
- * 設定が変更された際、永続化ストアに自動保存するフック。
- * settingsLoaded が true になった後の変更のみを保存対象にすることで、
- * 初期ロード直後に意図せず上書き保存してしまうのを防ぐ。
+ * Hook that automatically persists settings to the persistent store whenever
+ * they change.
+ * Only saves changes that happen after settingsLoaded becomes true, to avoid
+ * unintentionally overwriting the persisted data right after the initial load.
  */
 export function useSettingsAutoSave(): void {
   const settings = useRecorderStore((s) => s.settings);
@@ -54,8 +55,10 @@ export function useSettingsAutoSave(): void {
 }
 
 /**
- * mainプロセスから送られるMP4変換(FFmpeg)の進捗イベントをstoreに反映するフック(Phase3)。
- * アプリ全体で一度だけ購読すればよいため、App.tsxのトップレベルで呼び出す想定。
+ * Hook that reflects MP4 conversion (FFmpeg) progress events sent from the main
+ * process into the store (Phase 3).
+ * Should be subscribed exactly once for the whole app, so it's called from the
+ * top level of App.tsx.
  */
 export function useConversionProgress(): void {
   const setConversionProgress = useRecorderStore((s) => s.setConversionProgress);
@@ -63,7 +66,7 @@ export function useConversionProgress(): void {
   useEffect(() => {
     const unsubscribe = window.electronAPI.onConversionProgress((progress) => {
       setConversionProgress(progress);
-      // 完了・失敗したら少し見せてからクリアする(ユーザーが結果を確認できるように)
+      // After completion/failure, keep it visible briefly before clearing (so the user can see the result)
       if (progress.phase === 'completed' || progress.phase === 'failed') {
         setTimeout(() => {
           setConversionProgress(null);
@@ -71,7 +74,7 @@ export function useConversionProgress(): void {
       }
     });
     return unsubscribe;
-    // マウント時のみ購読/解除
+    // Subscribe/unsubscribe only on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 }

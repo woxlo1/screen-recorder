@@ -1,15 +1,16 @@
 import type { RecordingStatus } from '../shared/types';
 
 /**
- * main プロセス内で録画の進行状態を保持するクラス。
+ * Class that holds the in-progress state of a recording within the main process.
  *
- * 実際のメディアキャプチャ(MediaRecorder)はブラウザAPIのためrendererでしか
- * 動作しないが、「今録画中かどうか」を多重起動防止・トレイアイコン更新などの
- * 目的でmain側でも把握しておく必要があるため、ここで状態を一元管理する。
+ * Actual media capture (MediaRecorder) is a browser API and can therefore only run
+ * in the renderer, but the main process still needs to know "whether a recording
+ * is currently active" for purposes like preventing duplicate starts or updating a
+ * tray icon, so that state is centrally managed here.
  *
- * また、Electronの session.setDisplayMediaRequestHandler は「今ユーザーが
- * 選択しているキャプチャソースID」と「システム音声(ループバック)を含めるか」を
- * main プロセス側で知っている必要があるため、それらもここで保持する。
+ * Additionally, Electron's session.setDisplayMediaRequestHandler needs to know
+ * "which capture source the user currently has selected" and "whether to include
+ * system audio (loopback)" from the main process side, so those are also held here.
  */
 export class RecordingStateManager {
   private status: RecordingStatus = 'idle';
@@ -25,12 +26,12 @@ export class RecordingStateManager {
     return this.status === 'recording' || this.status === 'paused';
   }
 
-  /** 現在録画対象として選択されているキャプチャソースID（displayMediaRequestHandlerが参照） */
+  /** ID of the capture source currently selected for recording (read by displayMediaRequestHandler) */
   getSelectedSourceId(): string | null {
     return this.selectedSourceId;
   }
 
-  /** システム音声(ループバック)を含めて録画するかどうか */
+  /** Whether to record including system audio (loopback) */
   isSystemAudioRequested(): boolean {
     return this.systemAudioRequested;
   }
@@ -54,7 +55,7 @@ export class RecordingStateManager {
     }
   }
 
-  /** 停止し、録画時間(ms)を返してidleに戻す */
+  /** Stops, returns the recording duration (ms), and returns to idle */
   stop(): number {
     const duration = this.startedAt !== null ? Date.now() - this.startedAt : 0;
     this.status = 'idle';
@@ -72,5 +73,5 @@ export class RecordingStateManager {
   }
 }
 
-/** main プロセス全体で共有するシングルトンインスタンス */
+/** Singleton instance shared across the entire main process */
 export const recordingStateManager = new RecordingStateManager();

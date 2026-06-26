@@ -1,66 +1,106 @@
-# Screen Recorder (Windows / macOS 対応 画面録画ソフト)
+# Screen Recorder (Screen recording app for Windows / macOS)
 
-## Phase 3 で追加した内容
+## Added in the i18n update
 
-- **修正: preloadスクリプトが読み込めない不具合 (ENOENT)**
-  - `package.json` の `"type": "module"` の影響で、`vite-plugin-electron` がpreloadを
-    ESM形式(`index.mjs`)で出力していたが、`main/index.ts` 側は `index.js` を読みにいく設定の
-    ままだったため、起動時に `Unable to load preload script ... ENOENT` で失敗していた
-    (Phase 1からの既存バグ)。
-  - `vite.config.ts` のpreloadビルド設定に `rollupOptions.output` を追加し、
-    出力フォーマットをCommonJS・ファイル名を `index.js` に固定して解消。
-- **MP4変換の実装 (FFmpeg)**
-  - `fluent-ffmpeg` + `ffmpeg-static`（FFmpeg本体を同梱、別途インストール不要）
-  - WebM(VP9/Opus) → MP4(H.264/H.265 + AAC) 変換
-  - コーデックは設定画面から選択可能（既定: H.264。互換性重視。H.265は高圧縮・高画質だが
-    再生環境によっては非対応な場合があるため、選択式にして既定はH.264のまま）
-  - 変換進捗をUIにプログレスバー表示（FFmpegの`progress`イベントを `recorder:conversionProgress`
-    でmain→renderer通知。`window.electronAPI.onConversionProgress`で購読）
-  - エラーハンドリング: FFmpeg未検出 / 入力ファイル破損 / ディスク容量不足 / 書き込み権限なし
-    などを判定し、日本語の分かりやすいメッセージに変換
-  - 変換成功後、元のWebM一時ファイルは自動削除（ディスクを圧迫しないように）
-- **macOS対応の最終仕上げ**
-  - `electron-builder.json` に `asarUnpack` を追加し、FFmpegバイナリをasar外に展開
-    （asar内のバイナリはexecできないため、Windows/macOS共通でこの設定が必須）
-  - FFmpegバイナリの実パス解決を開発時/パッケージ後の両方で行うユーティリティを追加
-    (`src/main/ffmpeg-binary.ts`)
-  - 起動時にFFmpegの解決済みパスをログ出力（トラブルシュート用）
+- **UI language switcher (English / Japanese)**
+  - Added a renderer-side i18n system (`src/renderer/i18n`) with English and
+    Japanese dictionaries, a `useTranslation()` hook for components, and a
+    `translate()` helper for plain TS modules (recorder controllers) that
+    throw user-facing errors.
+  - The selected language is stored as `AppSettings.language` and persisted
+    via the existing settings save/load flow, so it's remembered across
+    restarts. Default language is English.
+  - A language toggle button is available in the app header, and a dedicated
+    language section is available on the Settings screen.
+  - Main-process user-facing strings (IPC error messages, the folder-select
+    dialog title, FFmpeg error translations, capture-source fallback names)
+    are also localized via `src/main/messages.ts`, which reads the current
+    language directly from the persisted settings store.
+  - Recording-history date formatting now follows the selected language's
+    locale instead of being hardcoded to `ja-JP`.
+- All source comments and internal/log-only strings across `main`, `preload`,
+  `renderer`, and `shared` were translated from Japanese to English.
 
-## Phase 2 で追加した内容
+## Added in Phase 3
 
-- **クロスプラットフォーム対応 (Windows / macOS M1含む)**
-  - macOSではシステム音声ループバック録音をUI上で自動的に無効化（OS制約のため非対応。理由を表示）
-  - macOSの「画面録画」権限が未許可の場合、画面上部に許可手順を表示
-  - macOSのマイク権限を明示的にリクエストする仕組み (`systemPreferences`)
-  - `electron-builder.json` に macOS (arm64 / x64) 向けのビルド設定 (dmg / zip) を追加
-- 解像度・FPS設定を実際の映像トラック制約 (`mandatory` constraints) に反映
-- 設定の永続化（`userData/store.json`。再起動後も保存先・FPS・解像度等を保持）
-- 録画履歴機能（保存日時・再生時間・ファイルサイズの一覧、ファイルの場所を開く、削除）
-- エラーハンドリング強化（権限拒否・録画失敗を日本語の分かりやすいメッセージに変換）
+- **Fix: preload script failed to load (ENOENT)**
+  - Because of `"type": "module"` in `package.json`, `vite-plugin-electron`
+    was emitting the preload script in ESM format (`index.mjs`), while
+    `main/index.ts` was still configured to load `index.js` — causing
+    `Unable to load preload script ... ENOENT` on startup (a pre-existing
+    bug from Phase 1).
+  - Fixed by adding `rollupOptions.output` to the preload build config in
+    `vite.config.ts`, pinning the output format to CommonJS and the file
+    name to `index.js`.
+- **MP4 conversion (FFmpeg)**
+  - `fluent-ffmpeg` + `ffmpeg-static` (bundles the FFmpeg binary itself, no
+    separate installation required).
+  - Converts WebM (VP9/Opus) → MP4 (H.264/H.265 + AAC).
+  - Codec is selectable from the settings screen (default: H.264, for
+    compatibility. H.265 offers higher compression and quality but isn't
+    supported by every playback environment, so it's left selectable with
+    H.264 as the default).
+  - Conversion progress is shown in the UI as a progress bar (FFmpeg's
+    `progress` event is forwarded from main to renderer via
+    `recorder:conversionProgress`, subscribed to with
+    `window.electronAPI.onConversionProgress`).
+  - Error handling: detects cases such as FFmpeg not found, corrupted input
+    file, insufficient disk space, or missing write permission, and converts
+    them into clear, localized messages.
+  - The original temporary WebM file is automatically deleted after a
+    successful conversion (to avoid using up disk space).
+- **macOS support finalization**
+  - Added `asarUnpack` to `electron-builder.json` so the FFmpeg binary is
+    extracted outside of the asar archive (binaries inside asar can't be
+    executed, so this setting is required on both Windows and macOS).
+  - Added a utility that resolves the real path of the FFmpeg binary both in
+    development and after packaging (`src/main/ffmpeg-binary.ts`).
+  - Logs the resolved FFmpeg path on startup (for troubleshooting).
 
-## Phase 1 (MVP) の内容
+## Added in Phase 2
 
-- デスクトップ全体 / 個別ウィンドウのキャプチャソース選択 (`desktopCapturer`)
-- 複数モニター対応
-- 録画 開始 / 一時停止 / 再開 / 停止
-- マイク音声 / システム音声の ON/OFF
-- WebM形式での保存（保存先フォルダ・ファイル名指定）
-- 設定画面（保存先 / FPS / 解像度 / ビットレート）
-- 型安全なIPC、Node Integration無効・Context Isolation有効・Sandbox有効
+- **Cross-platform support (Windows / macOS, including Apple Silicon)**
+  - On macOS, system-audio loopback recording is automatically disabled in
+    the UI (unsupported due to OS constraints; the reason is shown).
+  - If macOS's "Screen Recording" permission hasn't been granted, the
+    permission steps are shown at the top of the screen.
+  - Explicitly requests macOS microphone permission (`systemPreferences`).
+  - Added macOS (arm64 / x64) build configuration (dmg / zip) to
+    `electron-builder.json`.
+- Resolution/FPS settings are now reflected in the actual video track
+  constraints (`mandatory` constraints).
+- Settings are now persisted (`userData/store.json`); output folder, FPS,
+  resolution, etc. are retained across restarts.
+- Recording history feature (list of saved date/time, duration, and file
+  size; open file location; delete).
+- Improved error handling (permission denial and recording failures are
+  converted into clear, localized messages).
 
-## セットアップ
+## Phase 1 (MVP) contents
+
+- Choose a capture source: the entire desktop or an individual window
+  (`desktopCapturer`).
+- Multi-monitor support.
+- Start / pause / resume / stop recording.
+- Microphone audio / system audio ON/OFF.
+- Save as WebM (configurable output folder and file name).
+- Settings screen (output folder / FPS / resolution / bitrate).
+- Type-safe IPC, with Node Integration disabled, Context Isolation enabled,
+  and Sandbox enabled.
+
+## Setup
 
 ```bash
 npm install
 ```
 
-## 開発モードで起動
+## Run in development mode
 
 ```bash
 npm run dev
 ```
 
-## 型チェック / Lint / Format
+## Typecheck / Lint / Format
 
 ```bash
 npm run typecheck
@@ -68,71 +108,82 @@ npm run lint
 npm run format
 ```
 
-## 本番ビルド
+## Production build
 
 ```bash
-npm run build       # 現在のOS向け
+npm run build       # for the current OS
 npm run build:win   # Windows (.exe / NSIS)
 npm run build:mac   # macOS (.dmg / .zip, arm64 + x64)
 ```
 
-`release/` フォルダに出力されます。
+Output is written to the `release/` folder.
 
-> **注意:** `build/icon.ico` / `build/icon.icns` はまだ用意していません。
-> ビルド前にアプリ用アイコンを配置してください（未配置の場合electron-builderの既定アイコンが使われます）。
+> **Note:** `build/icon.ico` / `build/icon.icns` are not provided yet.
+> Place your app icon before building (electron-builder's default icon will
+> be used otherwise).
 
-> **MP4変換について:** `ffmpeg-static` がOS/アーキテクチャごとのFFmpegバイナリを
-> `node_modules`内に同梱するため、追加インストールは不要です。
-> ただし `electron-builder.json` の `asarUnpack` 設定により、パッケージ後も
-> バイナリがasar外に展開されることが必須です（実行ファイルはasar内から直接exec不可なため）。
+> **About MP4 conversion:** `ffmpeg-static` bundles the FFmpeg binary for
+> each OS/architecture inside `node_modules`, so no separate installation is
+> required. However, the `asarUnpack` setting in `electron-builder.json` is
+> required to ensure the binary is extracted outside of asar even after
+> packaging (executables inside asar can't be exec'd directly).
 
-## macOSで実行する際の注意点
+## Notes for running on macOS
 
-1. 初回起動時、画面共有のためにmacOSの「システム設定 ＞ プライバシーとセキュリティ ＞ 画面録画」で
-   本アプリへのアクセスを許可してください（許可後はアプリの再起動が必要です）。
-2. マイクを使う場合も同様に「マイク」の許可が必要です（初回はOS標準の許可ダイアログが出ます）。
-3. システム音声の録音はOS標準APIの制約上サポートしていません。
-   システム音声も録音したい場合は [BlackHole](https://github.com/ExistentialAudio/BlackHole) 等の
-   仮想オーディオデバイスを導入し、マイク入力としてBlackHoleを選択してください（将来的にUIから選択可能にする予定）。
-4. 配布用にビルドした `.app` を他のMacで実行する場合、Appleの審査を通さない限り
-   Gatekeeperの警告が出ます。社内配布等であれば「control+クリック→開く」で起動できますが、
-   一般配布する場合は Apple Developer Program でのコード署名 + notarization が推奨されます
-   （`electron-builder.json` の `hardenedRuntime` / `entitlements` は署名前提の設定です）。
-5. H.265(HEVC)で書き出したMP4は、古いmacOS/QuickTimeや一部のWindows標準プレイヤーで
-   再生できない場合があります。互換性を優先する場合はH.264を選択してください。
+1. On first launch, grant this app access under macOS's
+   "System Settings > Privacy & Security > Screen Recording" so it can
+   share the screen (you'll need to restart the app after granting access).
+2. Using the microphone likewise requires "Microphone" permission (the OS's
+   standard permission dialog will appear the first time).
+3. Recording system audio is not supported, due to OS API constraints.
+   If you also want to record system audio, install a virtual audio device
+   such as [BlackHole](https://github.com/ExistentialAudio/BlackHole) and
+   select it as the microphone input (selecting it from the UI directly is
+   planned for the future).
+4. If you distribute a built `.app` to other Macs without going through
+   Apple's review process, Gatekeeper will show a warning. For internal
+   distribution, it can still be launched via "control+click > Open", but
+   for general distribution, code signing + notarization through the Apple
+   Developer Program is recommended (the `hardenedRuntime` / `entitlements`
+   settings in `electron-builder.json` assume signing will be done).
+5. MP4 files exported with H.265 (HEVC) may not play back on older
+   macOS/QuickTime versions or on some standard Windows players. Choose
+   H.264 if compatibility is a priority.
 
-## ディレクトリ構成
+## Directory structure
 
 ```
 src/
   main/
-    index.ts             # エントリーポイント(BrowserWindow生成)
-    ipc-handlers.ts       # ipcMain.handle 登録
+    index.ts                  # Entry point (creates the BrowserWindow)
+    ipc-handlers.ts            # Registers ipcMain.handle handlers
     capture-sources.ts
     recording-state.ts
-    permissions.ts         # macOS権限判定・リクエスト(Phase2)
-    persistent-store.ts     # 設定・履歴の永続化(Phase2)
+    permissions.ts              # macOS permission checks/requests (Phase 2)
+    persistent-store.ts          # Settings/history persistence (Phase 2)
     paths.ts
-    ffmpeg-binary.ts          # FFmpegバイナリの実パス解決(Phase3)
-    ffmpeg-converter.ts        # WebM→MP4変換ロジック(Phase3)
+    ffmpeg-binary.ts               # Resolves the real FFmpeg binary path (Phase 3)
+    ffmpeg-converter.ts             # WebM -> MP4 conversion logic (Phase 3)
+    messages.ts                      # Localized main-process strings (i18n update)
   preload/
-    index.ts               # contextBridge で window.electronAPI を公開
+    index.ts                     # Exposes window.electronAPI via contextBridge
   renderer/
     main.tsx / App.tsx
     features/
-      recorder/             # 録画ロジック・UI (ConversionProgressBarはPhase3)
-      audio/                 # 音声設定UI
-      settings/               # 設定画面(保存形式・コーデック選択はPhase3)
-      history/                 # 録画履歴パネル(Phase2)
+      recorder/                  # Recording logic/UI (ConversionProgressBar is Phase 3)
+      audio/                      # Audio settings UI
+      settings/                    # Settings screen (format/codec selection is Phase 3;
+                                     # LanguageSwitcher is the i18n update)
+      history/                      # Recording history panel (Phase 2)
+    i18n/                           # Translation dictionaries, useTranslation()/translate() (i18n update)
     hooks/
-      useAppBootstrap.ts       # 起動時の設定/履歴ロード・変換進捗購読(Phase2/3)
+      useAppBootstrap.ts            # Loads settings/history on startup, subscribes to
+                                      # conversion progress (Phase 2/3)
     store/
-      recorderStore.ts          # Zustand
+      recorderStore.ts               # Zustand
     types/
       global.d.ts
   shared/
-    types.ts                    # 全プロセス共有の型
-    ipc-contract.ts               # IPCチャンネル定義(型安全)
+    types.ts                         # Types shared across all processes
+    ipc-contract.ts                    # IPC channel definitions (type-safe)
 ```
-
-

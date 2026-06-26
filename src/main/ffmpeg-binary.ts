@@ -1,26 +1,30 @@
 import fs from 'node:fs';
 import { app } from 'electron';
-// ffmpeg-static は文字列の絶対パス(または非対応プラットフォームではnull)を default export する
-// CommonJSパッケージ。mainプロセスのビルド出力はCJS固定にしているため、通常のimportで
-// 問題なく読み込める(Viteがビルド時にrequire()相当へ変換する)。
+// ffmpeg-static is a CommonJS package that default-exports an absolute path string
+// (or null on unsupported platforms). Since the main process build output is fixed
+// to CJS, it can be imported normally (Vite converts it to a require() call at build time).
 import ffmpegStaticPath from 'ffmpeg-static';
 
 /**
- * ffmpeg-static が返すバイナリパスを、開発時 / パッケージ後の両方で正しく解決する。
+ * Resolves the binary path returned by ffmpeg-static correctly both in development
+ * and after packaging.
  *
- * 背景:
- *  - ffmpeg-static の `ffmpegPath` は node_modules 内の実バイナリパスを指す。
- *  - electron-builder で packaging すると node_modules は app.asar に固められるが、
- *    バイナリ(実行ファイル)は asar 内から直接 exec できないため、
- *    electron-builder.json の `asarUnpack` で app.asar.unpacked 配下に展開しておく必要がある。
- *  - そのため本番環境では `app.asar` という文字列を `app.asar.unpacked` に置き換えたパスを使う。
- *  - Windows / macOS いずれもこの置換ロジックで対応可能（パス区切り文字に依存しないため）。
+ * Background:
+ *  - ffmpeg-static's `ffmpegPath` points to the real binary path inside node_modules.
+ *  - When packaged with electron-builder, node_modules gets bundled into app.asar,
+ *    but the binary (an executable) can't be exec'd directly from inside an asar
+ *    archive, so it must be unpacked into app.asar.unpacked via electron-builder.json's
+ *    `asarUnpack` setting.
+ *  - For that reason, in production we use a path where the string `app.asar` has been
+ *    replaced with `app.asar.unpacked`.
+ *  - This replacement logic works on both Windows and macOS (it doesn't depend on the
+ *    path separator character).
  *
- * @throws 現在のOS/アーキテクチャ向けのffmpegバイナリが同梱されていない場合
+ * @throws if no FFmpeg binary for the current OS/architecture is bundled
  */
 export function resolveFfmpegPath(): string {
   if (ffmpegStaticPath === null) {
-    throw new Error('このOS/アーキテクチャ向けのFFmpegバイナリが見つかりません');
+    throw new Error('No FFmpeg binary found for this OS/architecture');
   }
 
   if (!app.isPackaged) {
@@ -31,7 +35,7 @@ export function resolveFfmpegPath(): string {
   return fs.existsSync(unpackedPath) ? unpackedPath : ffmpegStaticPath;
 }
 
-/** ffmpegバイナリが実際に存在し実行可能か確認する（起動時の事前チェック・エラーハンドリング用） */
+/** Checks whether the ffmpeg binary actually exists and is executable (used for startup checks / error handling). */
 export function isFfmpegAvailable(): boolean {
   try {
     const ffmpegPath = resolveFfmpegPath();
@@ -41,7 +45,7 @@ export function isFfmpegAvailable(): boolean {
   }
 }
 
-/** デバッグ用にffmpegの解決済み絶対パスをログ出力する */
+/** Logs the resolved absolute path of ffmpeg for debugging purposes. */
 export function logFfmpegPath(): void {
   try {
     console.log('[ffmpeg] resolved path:', resolveFfmpegPath());

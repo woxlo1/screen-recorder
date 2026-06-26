@@ -8,11 +8,12 @@ import {
 } from './mediaStream';
 import { MediaRecorderController } from './MediaRecorderController';
 import { RESOLUTION_MAP } from '../../../shared/types';
+import { translate } from '../../i18n';
 
 /**
- * 録画フロー全体を制御するフック。
- * UIコンポーネントはこのフックが返すアクションを呼ぶだけでよく、
- * Electron IPCやMediaRecorderの詳細を知らなくて済む。
+ * Hook that controls the entire recording flow.
+ * UI components only need to call the actions this hook returns; they don't
+ * need to know the details of Electron IPC or MediaRecorder.
  */
 export function useRecorderController() {
   const controllerRef = useRef<MediaRecorderController | null>(null);
@@ -28,9 +29,10 @@ export function useRecorderController() {
   const setRecordingError = useRecorderStore((s) => s.setRecordingError);
 
   /**
-   * 録画中に予期せぬエラー(OS側キャプチャ異常等)が起きた際の後始末。
-   * ストリームを止め、main側にも停止を伝え、UIへエラーを表示する。
-   * 「録画開始」ボタンに戻れる状態まで確実に復帰させることを優先する。
+   * Cleanup performed when an unexpected error occurs mid-recording (e.g. an
+   * OS-level capture failure). Stops the streams, tells main to stop as well,
+   * and shows the error in the UI. Prioritizes reliably returning to a state
+   * where the "Start Recording" button works again.
    */
   const handleUnexpectedStop = useCallback(
     (reason: string) => {
@@ -43,8 +45,9 @@ export function useRecorderController() {
       setPreviewStream(null);
       setStatus('idle');
       setRecordingError(reason);
-      // main側の状態(recording-state.ts)も録画中のままになってしまうため、
-      // stopRecordingを呼んで同期させておく(IPC失敗は握り潰してよい: UI復帰が優先)。
+      // Main's state (recording-state.ts) would otherwise stay stuck as "recording",
+      // so call stopRecording to resync it (an IPC failure here can be safely swallowed:
+      // restoring the UI takes priority).
       void window.electronAPI
         .stopRecording({ buffer: new ArrayBuffer(0), durationMs: 0 })
         .catch(() => undefined);
@@ -52,10 +55,10 @@ export function useRecorderController() {
     [setStatus, setPreviewStream, setRecordingError],
   );
 
-  /** 録画開始: ソース・音声ストリームを取得し、main側にも開始を通知する */
+  /** Start recording: acquire the source/audio streams and notify main that recording has started */
   const start = useCallback(async () => {
     if (!selectedSource) {
-      throw new Error('録画ソースが選択されていません');
+      throw new Error(translate('errors.sourceNotSelected'));
     }
 
     setRecordingError(null);
@@ -66,25 +69,24 @@ export function useRecorderController() {
       audio: audioSettings,
     });
     if (!startResult.success) {
-      throw new Error(startResult.errorMessage ?? '録画を開始できませんでした');
+      throw new Error(startResult.errorMessage ?? translate('errors.startFailed'));
     }
 
     let videoStream: MediaStream;
     try {
-      // 映像とシステム音声(有効な場合)を1回のgetDisplayMediaでまとめて取得する。
-      // main側のsetDisplayMediaRequestHandlerが選択済みソースと
-      // システム音声要否を見て自動応答するため、ここでOSのピッカーは出ない。
-      // platformCapabilitiesが未読み込み、またはOSが非対応の場合は
-      // 安全側に倒してシステム音声をスキップする。
+      // Acquire the video stream and (if enabled) system audio together in a single
+      // getDisplayMedia call. Main's setDisplayMediaRequestHandler sees the already
+      // selected source and whether system audio is requested and responds
+      // automatically, so the OS picker is never shown here.
+      // If platformCapabilities hasn't loaded yet, or the OS doesn't support it,
+      // fail safe by skipping system audio.
       const wantsSystemAudio =
         audioSettings.systemAudioEnabled &&
         Boolean(platformCapabilities?.systemAudioLoopbackSupported);
       videoStream = await getDisplayCaptureStream(quality, wantsSystemAudio);
     } catch (error) {
-      // macOSでは「システム環境設定 > 画面録画」の許可が無いとここで失敗する
-      throw new Error(
-        toFriendlyMediaError(error, '画面録画の権限が許可されていない可能性があります。'),
-      );
+      // On macOS, this fails here if "System Settings > Screen Recording" permission hasn't been granted
+      throw new Error(toFriendlyMediaError(error, translate('errors.screenPermissionHint')));
     }
     rawVideoStreamRef.current = videoStream;
 
@@ -95,9 +97,7 @@ export function useRecorderController() {
       }
     } catch (error) {
       stopStream(videoStream);
-      throw new Error(
-        toFriendlyMediaError(error, 'マイクの権限が許可されていない可能性があります。'),
-      );
+      throw new Error(toFriendlyMediaError(error, translate('errors.microphonePermissionHint')));
     }
     audioStreamsRef.current = audioStreams;
 
@@ -120,14 +120,14 @@ export function useRecorderController() {
     handleUnexpectedStop,
   ]);
 
-  /** 一時停止 */
+  /** Pause */
   const pause = useCallback(async () => {
     controllerRef.current?.pause();
     await window.electronAPI.pauseRecording();
     setStatus('paused');
   }, [setStatus]);
 
-  /** 再開 */
+  /** Resume */
   const resume = useCallback(async () => {
     controllerRef.current?.resume();
     await window.electronAPI.resumeRecording();
@@ -135,13 +135,13 @@ export function useRecorderController() {
   }, [setStatus]);
 
   /**
-   * 停止: MediaRecorderを止めてBlobを取得し、mainプロセスへ転送して
-   * 一時WebMファイルとして書き出してもらう。戻り値の一時ファイルパスは
-   * 保存(saveVideo)ステップで利用する。
+   * Stop: stops the MediaRecorder, gets the resulting Blob, and transfers it to
+   * the main process to be written out as a temporary WebM file. The returned
+   * temporary file path is used in the following save (saveVideo) step.
    */
   const stop = useCallback(async (): Promise<{ tempFilePath: string; durationMs: number }> => {
     if (!controllerRef.current) {
-      throw new Error('録画中ではありません');
+      throw new Error(translate('errors.notRecording'));
     }
 
     const { blob, durationMs } = await controllerRef.current.stop();
@@ -149,7 +149,7 @@ export function useRecorderController() {
 
     const result = await window.electronAPI.stopRecording({ buffer, durationMs });
 
-    // ストリームの後始末
+    // Clean up the streams
     stopStream(rawVideoStreamRef.current);
     audioStreamsRef.current.forEach(stopStream);
     rawVideoStreamRef.current = null;
@@ -164,14 +164,15 @@ export function useRecorderController() {
   return { start, pause, resume, stop };
 }
 
-/** 解像度プリセットから { width, height } を取得するヘルパー（UI表示などに利用） */
+/** Helper that gets { width, height } from a resolution preset (used e.g. for UI display) */
 export function getResolutionDimensions(preset: keyof typeof RESOLUTION_MAP) {
   return RESOLUTION_MAP[preset];
 }
 
 /**
- * getUserMedia系のDOMExceptionを、ユーザーが対処しやすい日本語メッセージに変換する。
- * NotAllowedError(権限拒否) かどうかを判定し、それ以外は元のエラー内容を表示する。
+ * Converts a getUserMedia-family DOMException into a message the user can act on.
+ * Checks whether it's a NotAllowedError (permission denied); otherwise shows the
+ * original error content.
  */
 function toFriendlyMediaError(error: unknown, permissionHint: string): string {
   if (
@@ -180,5 +181,5 @@ function toFriendlyMediaError(error: unknown, permissionHint: string): string {
   ) {
     return permissionHint;
   }
-  return error instanceof Error ? error.message : '不明なエラーが発生しました';
+  return error instanceof Error ? error.message : translate('errors.unknown');
 }

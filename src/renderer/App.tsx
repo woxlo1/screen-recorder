@@ -6,7 +6,9 @@ import { ConversionProgressBar } from './features/recorder/ConversionProgressBar
 import { AudioPanel } from './features/audio/AudioPanel';
 import { SettingsScreen } from './features/settings/SettingsScreen';
 import { HistoryPanel } from './features/history/HistoryPanel';
+import { LanguageSwitcher } from './features/settings/LanguageSwitcher';
 import { useRecorderStore } from './store/recorderStore';
+import { useTranslation } from './i18n';
 import {
   useAppBootstrap,
   useSettingsAutoSave,
@@ -14,6 +16,7 @@ import {
 } from './hooks/useAppBootstrap';
 
 export function App() {
+  const { t } = useTranslation();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [savingMessage, setSavingMessage] = useState<string | null>(null);
@@ -25,21 +28,21 @@ export function App() {
   const recordingError = useRecorderStore((s) => s.recordingError);
   const setRecordingError = useRecorderStore((s) => s.setRecordingError);
 
-  // 起動時に設定/履歴/プラットフォーム情報を読み込み、以後の設定変更を自動保存する
+  // On startup, load settings/history/platform info and auto-save settings changes afterwards
   useAppBootstrap();
   useSettingsAutoSave();
-  // MP4変換(FFmpeg)の進捗イベントを購読する(Phase3)
+  // Subscribe to MP4 conversion (FFmpeg) progress events (Phase 3)
   useConversionProgress();
 
-  /** 録画停止後、一時WebMファイルを最終的な保存先に保存する(設定がmp4ならFFmpeg変換も行う) */
+  /** After recording stops, saves the temporary WebM file to its final destination (also runs FFmpeg conversion if the format is mp4) */
   const handleRecordingStopped = async (tempFilePath: string, durationMs: number) => {
     if (!settings.save.outputDirectory) {
-      setSavingMessage('保存先が未設定です。設定画面から保存先を選択してください。');
+      setSavingMessage(t('saving.noOutputDirectory'));
       return;
     }
 
     const isMp4 = settings.save.format === 'mp4';
-    setSavingMessage(isMp4 ? 'MP4へ変換しています…' : '保存しています…');
+    setSavingMessage(isMp4 ? t('saving.converting') : t('saving.saving'));
 
     const result = await window.electronAPI.saveVideo({
       sourceFilePath: tempFilePath,
@@ -50,12 +53,12 @@ export function App() {
 
     setSavingMessage(
       result.success
-        ? `保存しました: ${result.filePath}`
-        : `保存に失敗しました: ${result.errorMessage}`,
+        ? t('saving.success', { path: result.filePath ?? '' })
+        : t('saving.failure', { message: result.errorMessage ?? '' }),
     );
 
     if (result.success) {
-      // 履歴一覧を最新化(保存成功時のみmain側に追記されているため再取得する)
+      // Refresh the history list (only main appends on successful save, so re-fetch it)
       const latestHistory = await window.electronAPI.getRecordingHistory();
       setHistory(latestHistory);
     }
@@ -68,44 +71,44 @@ export function App() {
   if (!settingsLoaded) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-950 text-gray-400">
-        読み込み中…
+        {t('app.loading')}
       </div>
     );
   }
 
   return (
     <div className="flex h-screen flex-col bg-gray-950 text-gray-100">
-      {/* 上部: アプリタイトル */}
+      {/* Top: app title */}
       <header className="flex items-center justify-between border-b border-gray-800 px-6 py-3">
-        <h1 className="text-lg font-bold tracking-wide">Screen Recorder</h1>
-        <div className="flex gap-2">
+        <h1 className="text-lg font-bold tracking-wide">{t('app.title')}</h1>
+        <div className="flex items-center gap-2">
+          <LanguageSwitcher />
           <button
             onClick={() => setHistoryOpen(true)}
             className="rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
           >
-            🕘 履歴 ({history.length})
+            {t('header.history', { count: history.length })}
           </button>
           <button
             onClick={() => setSettingsOpen(true)}
             className="rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
           >
-            ⚙ 設定
+            {t('header.settings')}
           </button>
         </div>
       </header>
 
       {macScreenPermissionDenied && (
         <div className="border-b border-yellow-900 bg-yellow-950/50 px-6 py-2 text-sm text-yellow-200">
-          画面録画の権限が許可されていません。「システム設定 ＞ プライバシーとセキュリティ ＞
-          画面録画」でこのアプリを許可してから再起動してください。
+          {t('permissions.macScreenDenied')}
         </div>
       )}
 
       {recordingError && (
         <div className="flex items-center justify-between border-b border-red-900 bg-red-950/50 px-6 py-2 text-sm text-red-200">
           <span>
-            録画が中断されました: {recordingError}
-            （Windowsの画面キャプチャ機能が一時的に不安定になることがあります。再度お試しください）
+            {t('recordingError.interrupted', { message: recordingError })}
+            {t('recordingError.windowsHint')}
           </span>
           <button
             onClick={() => setRecordingError(null)}
@@ -116,7 +119,7 @@ export function App() {
         </div>
       )}
 
-      {/* 中央: プレビュー + 右側: 音声設定 */}
+      {/* Center: preview + right side: audio settings */}
       <main className="flex flex-1 gap-4 overflow-hidden p-4">
         <section className="flex flex-1 flex-col gap-3">
           <PreviewPanel />
@@ -134,7 +137,7 @@ export function App() {
 
       <ConversionProgressBar />
 
-      {/* 下部: 録画コントロール */}
+      {/* Bottom: recording controls */}
       <ControlsBar
         onRecordingStopped={(path, durationMs) => void handleRecordingStopped(path, durationMs)}
       />

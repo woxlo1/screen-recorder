@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { useRecorderStore } from '../../store/recorderStore';
+import { useTranslation } from '../../i18n';
 
 /**
- * 現在のキャプチャ内容（または録画中の映像）を表示するプレビュー領域。
- * previewStreamがnullの場合は「未選択」のプレースホルダーを表示する。
+ * Preview area that shows the current capture content (or the in-progress recording).
+ * Shows an "unselected" placeholder when previewStream is null.
  */
 export function PreviewPanel() {
+  const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewStream = useRecorderStore((s) => s.previewStream);
   const selectedSource = useRecorderStore((s) => s.selectedSource);
@@ -24,10 +26,10 @@ export function PreviewPanel() {
         <div className="text-center text-gray-400">
           <p className="text-lg font-medium">
             {selectedSource
-              ? `${selectedSource.name} を選択中`
-              : 'キャプチャソースを選択してください'}
+              ? t('previewPanel.sourceSelected', { name: selectedSource.name })
+              : t('previewPanel.noSourceSelected')}
           </p>
-          <p className="mt-1 text-sm">録画を開始するとここにプレビューが表示されます</p>
+          <p className="mt-1 text-sm">{t('previewPanel.startHint')}</p>
         </div>
       )}
     </div>

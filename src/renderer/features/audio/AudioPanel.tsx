@@ -1,7 +1,9 @@
 import { useRecorderStore } from '../../store/recorderStore';
+import { useTranslation } from '../../i18n';
 
-/** メイン画面右側に表示する音声設定パネル */
+/** Audio settings panel shown on the right side of the main screen */
 export function AudioPanel() {
+  const { t } = useTranslation();
   const audio = useRecorderStore((s) => s.audio);
   const setAudioSettings = useRecorderStore((s) => s.setAudioSettings);
   const platformCapabilities = useRecorderStore((s) => s.platformCapabilities);
@@ -10,24 +12,23 @@ export function AudioPanel() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h3 className="text-sm font-semibold text-gray-200">音声設定</h3>
+      <h3 className="text-sm font-semibold text-gray-200">{t('audioPanel.title')}</h3>
 
       <ToggleRow
-        label="マイク録音"
+        label={t('audioPanel.microphone')}
         checked={audio.microphoneEnabled}
         onChange={(checked) => setAudioSettings({ microphoneEnabled: checked })}
       />
 
       <ToggleRow
-        label="システム音声録音"
+        label={t('audioPanel.systemAudio')}
         checked={audio.systemAudioEnabled}
         onChange={(checked) => setAudioSettings({ systemAudioEnabled: checked })}
         disabled={!systemAudioSupported}
       />
       {!systemAudioSupported && (
         <p className="text-xs leading-relaxed text-gray-500">
-          このOSではシステム音声の録音に対応していません（macOSの場合はmacOS
-          13(Ventura)以降が必要です。追加アプリのインストールは不要です）。
+          {t('audioPanel.systemAudioUnsupportedNote')}
         </p>
       )}
     </div>

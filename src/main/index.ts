@@ -6,13 +6,15 @@ import { getDefaultOutputDir } from './paths';
 import { logFfmpegPath } from './ffmpeg-binary';
 import { recordingStateManager } from './recording-state';
 
-// mainプロセスはCommonJSとしてビルドするため、__dirname はNode.jsが自動的に注入する
-// 組み込み変数をそのまま利用できる（ESM用の fileURLToPath(import.meta.url) は不要）。
-// ※ "type": "module" の package.json 配下でも、ビルド出力をCJS固定しているため問題ない。
-//   依存パッケージ(fluent-ffmpeg等)がCJS前提で内部的に __dirname を参照しているため、
-//   mainプロセス全体をESM化すると壊れる(__dirname is not defined)。これがCJS固定の理由。
+// The main process is built as CommonJS, so __dirname is automatically injected by
+// Node.js and can be used as-is (the ESM equivalent, fileURLToPath(import.meta.url),
+// is not needed).
+// This is fine even though package.json has "type": "module", because the build
+// output is fixed to CJS regardless. Several dependencies (e.g. fluent-ffmpeg)
+// internally rely on __dirname under a CJS assumption, so making the entire main
+// process ESM would break (__dirname is not defined) -- that's why CJS is fixed here.
 
-// Vite開発サーバーのURL（開発時のみ使用）。本番ビルドではdist/index.htmlを読む。
+// URL of the Vite dev server (only used during development). Production builds load dist/index.html.
 const DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL'];
 
 let mainWindow: BrowserWindow | null = null;
@@ -25,7 +27,7 @@ function createMainWindow(): void {
     minHeight: 640,
     title: 'Screen Recorder',
     webPreferences: {
-      // セキュリティ要件: Node統合は禁止、Context Isolationは必須
+      // Security requirement: Node integration must be disabled, Context Isolation must be enabled
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
@@ -46,9 +48,9 @@ function createMainWindow(): void {
 }
 
 /**
- * デスクトップ/システム音声キャプチャの権限を許可する。
- * Electronはデフォルトでメディア権限を要求するダイアログを出さないため、
- * 明示的にハンドラを登録してパーミッションを許可する必要がある。
+ * Grants permission for desktop/system audio capture.
+ * Electron does not show a permission-request dialog for media access by default,
+ * so a handler must be registered explicitly to grant the permission.
  */
 function setupPermissions(): void {
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
@@ -58,26 +60,28 @@ function setupPermissions(): void {
 }
 
 /**
- * renderer側は `navigator.mediaDevices.getDisplayMedia()` を呼ぶだけで、
- * 「どの画面/ウィンドウを録画するか」と「システム音声を含めるか」をここで解決して返す。
+ * The renderer side only needs to call `navigator.mediaDevices.getDisplayMedia()`;
+ * this function resolves "which screen/window to record" and "whether to include
+ * system audio" here, and returns the answer.
  *
- * これにより以下2点を同時に解決する:
- *  1. 録画画面が真っ白になる問題の修正
- *     旧実装は「映像用 getUserMedia」と「システム音声用 getUserMedia」を
- *     chromeMediaSource:'desktop' の制約で2回に分けて呼び出していた。
- *     Chromiumは同じデスクトップキャプチャセッションに対する
- *     mandatory制約ベースの並列リクエストを正しく扱えず、
- *     2回目の音声リクエストが1回目の映像キャプチャセッションを不正化し、
- *     映像トラックが無効(真っ白)になることがあった。
- *     映像+音声を1回の getDisplayMedia で同時に要求する今の実装ではこの競合が起きない。
- *  2. 音声録音のために追加アプリ(BlackHole等)のインストールが不要になる
- *     `audio: 'loopback'` を指定すると、ElectronがOS標準のシステム音声
- *     ループバック機能(Windows: WASAPI loopback / macOS 13+: ScreenCaptureKit)を
- *     直接利用してシステム音声を取得する。仮想オーディオデバイスの追加は不要。
+ * This simultaneously fixes two issues:
+ *  1. Fixes the recording screen showing up completely white/blank.
+ *     The old implementation called "getUserMedia for video" and "getUserMedia for
+ *     system audio" as two separate calls, both using the chromeMediaSource:'desktop'
+ *     mandatory constraint. Chromium doesn't correctly handle parallel
+ *     mandatory-constraint-based requests against the same desktop capture session;
+ *     the second (audio) request would invalidate the first (video) capture session,
+ *     leaving the video track disabled (blank/white). With the current implementation,
+ *     which requests video + audio together in a single getDisplayMedia call, this
+ *     race condition no longer occurs.
+ *  2. Removes the need to install an extra app (e.g. BlackHole) to record audio.
+ *     Specifying `audio: 'loopback'` makes Electron use the OS's built-in system
+ *     audio loopback feature directly (Windows: WASAPI loopback / macOS 13+:
+ *     ScreenCaptureKit), so no virtual audio device needs to be added.
  *
- * 独自の SourceSelector で選択済みのソースIDを desktopCapturer の結果から
- * 突き止めて `video` として返すため、Chromium標準の「画面共有ピッカー」は
- * 表示されない(handler自身がソースを確定して返すため)。
+ * Because the already-selected source ID is looked up from desktopCapturer's results
+ * by our own SourceSelector and returned as `video`, Chromium's standard "screen share
+ * picker" is never shown (the handler itself resolves and returns the source).
  */
 function setupDisplayMediaRequestHandler(): void {
   session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
@@ -95,8 +99,8 @@ function setupDisplayMediaRequestHandler(): void {
         const wantsSystemAudio = recordingStateManager.isSystemAudioRequested();
         callback({
           video: matched,
-          // Linuxはループバック音声に未対応のため、要求があってもaudioは付けない
-          // (Chromium側が対応プラットフォームかどうかを最終的に判断する)。
+          // Linux doesn't support loopback audio, so audio is omitted even if requested
+          // (Chromium itself ultimately decides whether the platform is supported).
           ...(wantsSystemAudio ? { audio: 'loopback' } : {}),
         });
       })
@@ -129,8 +133,8 @@ app.on('window-all-closed', () => {
 });
 
 /**
- * 初回起動時など保存先が未設定の場合、OSごとのデフォルト動画フォルダを
- * 自動的に設定しておく(Windows: %USERPROFILE%/Videos, macOS: ~/Movies)。
+ * On first launch (or whenever no output directory is set), automatically configure
+ * the OS-appropriate default video folder (Windows: %USERPROFILE%/Videos, macOS: ~/Movies).
  */
 function initializeDefaultOutputDirIfNeeded(): void {
   const settings = persistentStore.getSettings();

@@ -6,5 +6,5 @@ declare global {
   }
 }
 
-// このファイルをモジュールとして扱うための空export
+// Empty export to make this file be treated as a module
 export {};

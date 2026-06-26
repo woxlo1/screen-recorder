@@ -11,9 +11,10 @@ interface PersistedData {
 }
 
 /**
- * 設定と履歴をJSONファイルとして userData ディレクトリに永続化する。
- * electron-store 等の外部依存を増やさず、Node標準の fs だけで実装した
- * シンプルなストア。読み込み失敗時はデフォルト値にフォールバックする。
+ * Persists settings and history as a JSON file under the userData directory.
+ * A simple store implemented using only Node's standard fs module, without adding
+ * an external dependency like electron-store. Falls back to default values if
+ * loading fails.
  */
 class PersistentStore {
   private filePath: string;
@@ -34,7 +35,7 @@ class PersistentStore {
         history: parsed.history ?? [],
       };
     } catch {
-      // ファイルが無い、もしくは壊れている場合は初期値を使う
+      // Use initial values if the file doesn't exist or is corrupted
       this.cache = {
         settings: {
           ...DEFAULT_APP_SETTINGS,
@@ -66,14 +67,14 @@ class PersistentStore {
   }
 
   getHistory(): RecordingHistoryItem[] {
-    // 新しい録画が先頭に来るよう降順で返す
+    // Return in descending order so the newest recording appears first
     return [...this.load().history].sort((a, b) => b.createdAt - a.createdAt);
   }
 
   addHistoryItem(item: RecordingHistoryItem): void {
     const data = this.load();
     data.history.push(item);
-    // 履歴は直近100件のみ保持（無限に肥大化しないように）
+    // Keep only the most recent 100 entries (to prevent unbounded growth)
     if (data.history.length > 100) {
       data.history = data.history.slice(data.history.length - 100);
     }
@@ -93,5 +94,5 @@ class PersistentStore {
   }
 }
 
-/** main プロセス全体で共有するシングルトンインスタンス */
+/** Singleton instance shared across the entire main process */
 export const persistentStore = new PersistentStore();

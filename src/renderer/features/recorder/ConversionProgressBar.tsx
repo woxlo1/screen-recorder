@@ -1,10 +1,12 @@
 import { useRecorderStore } from '../../store/recorderStore';
+import { useTranslation } from '../../i18n';
 
 /**
- * MP4変換(FFmpeg)の進捗をオーバーレイ表示するバー(Phase3)。
- * conversionProgressがnullの間は何も表示しない。
+ * Overlay bar showing MP4 conversion (FFmpeg) progress (Phase 3).
+ * Renders nothing while conversionProgress is null.
  */
 export function ConversionProgressBar() {
+  const { t } = useTranslation();
   const progress = useRecorderStore((s) => s.conversionProgress);
 
   if (!progress) return null;
@@ -14,10 +16,12 @@ export function ConversionProgressBar() {
   const percent = progress.percent ?? (progress.phase === 'starting' ? 0 : undefined);
 
   const label = (() => {
-    if (isFailed) return 'MP4変換に失敗しました';
-    if (isCompleted) return 'MP4変換が完了しました';
-    if (progress.phase === 'starting') return 'MP4変換を準備中…';
-    return percent !== undefined ? `MP4変換中… ${Math.round(percent)}%` : 'MP4変換中…';
+    if (isFailed) return t('conversion.failed');
+    if (isCompleted) return t('conversion.completed');
+    if (progress.phase === 'starting') return t('conversion.preparing');
+    return percent !== undefined
+      ? t('conversion.inProgress', { percent: Math.round(percent) })
+      : t('conversion.inProgressUnknown');
   })();
 
   return (

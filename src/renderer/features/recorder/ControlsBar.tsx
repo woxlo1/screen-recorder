@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRecorderStore } from '../../store/recorderStore';
 import { useRecorderController } from './useRecorderController';
+import { useTranslation } from '../../i18n';
 
-/** ミリ秒を mm:ss 形式にフォーマットする */
+/** Formats milliseconds as mm:ss */
 function formatDuration(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60)
@@ -13,11 +14,12 @@ function formatDuration(ms: number): string {
 }
 
 interface ControlsBarProps {
-  /** 録画停止後、保存処理を呼び出すための一時ファイルパスと録画時間を親に渡す */
+  /** Passes the temporary file path and recording duration to the parent so it can trigger the save flow after recording stops */
   onRecordingStopped: (tempFilePath: string, durationMs: number) => void;
 }
 
 export function ControlsBar({ onRecordingStopped }: ControlsBarProps) {
+  const { t } = useTranslation();
   const status = useRecorderStore((s) => s.status);
   const selectedSource = useRecorderStore((s) => s.selectedSource);
   const { start, pause, resume, stop } = useRecorderController();
@@ -27,7 +29,7 @@ export function ControlsBar({ onRecordingStopped }: ControlsBarProps) {
   const baseElapsedRef = useRef(0);
   const segmentStartRef = useRef(0);
 
-  // 録画中のタイマー更新（一時停止中は止まる）
+  // Update the timer while recording (paused while in the "paused" state)
   useEffect(() => {
     if (status === 'recording') {
       segmentStartRef.current = Date.now();
@@ -57,7 +59,7 @@ export function ControlsBar({ onRecordingStopped }: ControlsBarProps) {
       setElapsedMs(0);
       await start();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '録画を開始できませんでした');
+      setError(err instanceof Error ? err.message : t('errors.startFailed'));
     }
   };
 
@@ -67,7 +69,7 @@ export function ControlsBar({ onRecordingStopped }: ControlsBarProps) {
       const result = await stop();
       onRecordingStopped(result.tempFilePath, result.durationMs);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '録画を停止できませんでした');
+      setError(err instanceof Error ? err.message : t('errors.stopFailed'));
     }
   };
 
@@ -80,7 +82,7 @@ export function ControlsBar({ onRecordingStopped }: ControlsBarProps) {
         await resume();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '操作に失敗しました');
+      setError(err instanceof Error ? err.message : t('errors.operationFailed'));
     }
   };
 
@@ -100,7 +102,7 @@ export function ControlsBar({ onRecordingStopped }: ControlsBarProps) {
           disabled={!isIdle || !selectedSource}
           className="rounded-full bg-red-600 px-6 py-2 font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-gray-700"
         >
-          ● 録画開始
+          {t('controls.start')}
         </button>
 
         <button
@@ -109,7 +111,7 @@ export function ControlsBar({ onRecordingStopped }: ControlsBarProps) {
           disabled={isIdle}
           className="rounded-full bg-gray-700 px-6 py-2 font-semibold text-white transition hover:bg-gray-600 disabled:cursor-not-allowed disabled:bg-gray-800 disabled:text-gray-500"
         >
-          {status === 'paused' ? '▶ 再開' : '⏸ 一時停止'}
+          {status === 'paused' ? t('controls.resume') : t('controls.pause')}
         </button>
 
         <button
@@ -118,7 +120,7 @@ export function ControlsBar({ onRecordingStopped }: ControlsBarProps) {
           disabled={isIdle}
           className="rounded-full bg-gray-700 px-6 py-2 font-semibold text-white transition hover:bg-gray-600 disabled:cursor-not-allowed disabled:bg-gray-800 disabled:text-gray-500"
         >
-          ■ 停止
+          {t('controls.stop')}
         </button>
       </div>
     </div>

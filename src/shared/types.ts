@@ -1,32 +1,32 @@
 /**
- * アプリ全体で共有する基礎的な型定義。
- * main / preload / renderer のどこからでも import 可能（Node API 依存を持たない）。
+ * Basic type definitions shared across the whole app.
+ * Importable from main / preload / renderer alike (has no dependency on Node APIs).
  */
 
-/** 録画可能なキャプチャソースの種類 */
+/** Type of capturable recording source */
 export type CaptureSourceType = 'screen' | 'window';
 
 /**
- * desktopCapturer.getSources() の結果をレンダラーに渡すための
- * シリアライズ可能な形式（NativeImage は dataURL 文字列に変換する）
+ * Serializable form of the result of desktopCapturer.getSources(), for passing
+ * to the renderer (NativeImage is converted to a dataURL string).
  */
 export interface CaptureSource {
-  /** Electron 内部で使われるソースID（desktopCapturer chromeMediaSourceId に渡す） */
+  /** Source ID used internally by Electron (passed to desktopCapturer chromeMediaSourceId) */
   id: string;
-  /** ユーザーに表示する名前（モニター名・ウィンドウタイトル） */
+  /** Name shown to the user (monitor name / window title) */
   name: string;
-  /** スクリーン全体 or 個別ウィンドウ */
+  /** Entire screen vs. a single window */
   type: CaptureSourceType;
-  /** サムネイル画像（PNG dataURL） */
+  /** Thumbnail image (PNG dataURL) */
   thumbnailDataUrl: string;
-  /** 複数モニター対応のための表示ID（screen の場合のみ有効） */
+  /** Display ID for multi-monitor support (only valid when type is "screen") */
   displayId?: string;
 }
 
-/** 対応FPS（仕様で固定の2値） */
+/** Supported FPS (fixed to these two values by spec) */
 export type RecordingFps = 30 | 60;
 
-/** 対応解像度プリセット */
+/** Supported resolution presets */
 export type ResolutionPreset = '720p' | '1080p' | '1440p' | '4k';
 
 export interface ResolutionDimensions {
@@ -34,7 +34,7 @@ export interface ResolutionDimensions {
   height: number;
 }
 
-/** 解像度プリセット → 実際のピクセルサイズ の対応表（型としても利用） */
+/** Resolution preset -> actual pixel size lookup table (also used as a type) */
 export const RESOLUTION_MAP: Record<ResolutionPreset, ResolutionDimensions> = {
   '720p': { width: 1280, height: 720 },
   '1080p': { width: 1920, height: 1080 },
@@ -42,52 +42,57 @@ export const RESOLUTION_MAP: Record<ResolutionPreset, ResolutionDimensions> = {
   '4k': { width: 3840, height: 2160 },
 };
 
-/** 出力コンテナ形式 */
+/** Output container format */
 export type OutputFormat = 'webm' | 'mp4';
 
-/** MP4変換時の映像コーデック */
+/** Video codec used when converting to MP4 */
 export type VideoCodec = 'h264' | 'h265';
 
-/** 録画品質設定（設定画面で変更する項目） */
+/** Recording quality settings (edited from the settings screen) */
 export interface RecordingQualitySettings {
   fps: RecordingFps;
   resolution: ResolutionPreset;
-  /** ビットレート (bps 単位。例: 8,000,000 = 8Mbps) */
+  /** Bitrate in bps (e.g. 8,000,000 = 8 Mbps) */
   bitrate: number;
 }
 
-/** 音声入力設定 */
+/** Audio input settings */
 export interface AudioSettings {
-  /** マイク録音 ON/OFF */
+  /** Microphone recording ON/OFF */
   microphoneEnabled: boolean;
-  /** システム音声録音 ON/OFF */
+  /** System audio recording ON/OFF */
   systemAudioEnabled: boolean;
-  /** 選択中のマイクデバイスID（未選択時は undefined = デフォルトデバイス） */
+  /** Selected microphone device ID (undefined when not selected = default device) */
   microphoneDeviceId?: string;
 }
 
-/** 録画の進行状態（一時停止を含む状態機械） */
+/** Recording progress state (a state machine that includes "paused") */
 export type RecordingStatus = 'idle' | 'recording' | 'paused' | 'stopping';
 
-/** 保存先・ファイル名に関する設定 */
+/** Settings related to the output destination / file name */
 export interface SaveSettings {
-  /** 保存先フォルダの絶対パス */
+  /** Absolute path of the output folder */
   outputDirectory: string;
-  /** 拡張子を含まないファイル名（指定が無ければ自動生成） */
+  /** File name without extension (auto-generated if not specified) */
   fileNameTemplate: string;
-  /** 出力フォーマット */
+  /** Output format */
   format: OutputFormat;
-  /** MP4の場合のコーデック（webm時は無視） */
+  /** Codec used when the format is MP4 (ignored for WebM) */
   videoCodec: VideoCodec;
 }
 
-/** アプリ全体の設定（設定画面で編集される永続化対象） */
+/** UI display language. Persisted as part of AppSettings so main and renderer agree on it. */
+export type SupportedLanguage = 'en' | 'ja';
+
+/** App-wide settings (the persisted object edited from the settings screen) */
 export interface AppSettings {
   quality: RecordingQualitySettings;
   save: SaveSettings;
+  /** UI display language. Also read by the main process to localize error messages. */
+  language: SupportedLanguage;
 }
 
-/** デフォルト設定値 */
+/** Default settings values */
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   quality: {
     fps: 30,
@@ -95,16 +100,17 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     bitrate: 8_000_000,
   },
   save: {
-    outputDirectory: '', // main プロセス起動時にユーザーのVideosフォルダ等で初期化
+    outputDirectory: '', // Initialized to the user's Videos folder etc. when the main process starts
     fileNameTemplate: 'recording',
     format: 'webm',
     videoCodec: 'h264',
   },
+  language: 'en',
 };
 
 /**
- * レンダラー側で MediaRecorder を起動する際に必要な
- * すべてのパラメータをまとめたリクエスト型
+ * Request type bundling all the parameters needed by the renderer
+ * to start the MediaRecorder.
  */
 export interface StartRecordingRequest {
   source: CaptureSource;
@@ -112,55 +118,55 @@ export interface StartRecordingRequest {
   audio: AudioSettings;
 }
 
-/** stopRecording の結果。一時ファイル(webm)のパスを返す */
+/** Result of stopRecording. Returns the path of the temporary (webm) file. */
 export interface StopRecordingResult {
-  /** 録画された一時 WebM ファイルの絶対パス */
+  /** Absolute path of the recorded temporary WebM file */
   tempFilePath: string;
-  /** 録画時間(ミリ秒) */
+  /** Recording duration (milliseconds) */
   durationMs: number;
 }
 
-/** saveVideo（最終保存・必要ならMP4変換）のリクエスト */
+/** Request for saveVideo (final save, with MP4 conversion if needed) */
 export interface SaveVideoRequest {
-  /** stopRecording で得られた一時ファイルパス */
+  /** Temporary file path obtained from stopRecording */
   sourceFilePath: string;
   save: SaveSettings;
-  /** 履歴記録用の録画時間(ミリ秒) */
+  /** Recording duration (milliseconds), used for the history entry */
   durationMs: number;
   /**
-   * 進捗イベントを呼び出し元に紐付けるための一意なID。
-   * MP4変換が発生しない(WebM保存のみの)場合は使われない。
+   * Unique ID used to associate progress events with the caller.
+   * Not used when no MP4 conversion occurs (i.e. WebM-only save).
    */
   requestId: string;
 }
 
 export interface SaveVideoResult {
   success: boolean;
-  /** 保存された最終ファイルの絶対パス */
+  /** Absolute path of the final saved file */
   filePath?: string;
   errorMessage?: string;
 }
 
 /**
- * MP4変換（FFmpeg）の進捗通知ペイロード。
- * main → renderer へ一方向イベント (on('recorder:conversionProgress')) で送られる。
- * 同一録画の処理であることを識別するため requestId を持たせる。
+ * MP4 conversion (FFmpeg) progress notification payload.
+ * Sent as a one-way event from main to renderer (on('recorder:conversionProgress')).
+ * Carries a requestId to identify which recording's conversion it belongs to.
  */
 export interface ConversionProgress {
   requestId: string;
-  /** 0-100 の進捗率。FFmpegが正確な進捗を算出できない場合はundefinedになることがある */
+  /** Progress percentage (0-100). May be undefined if FFmpeg cannot determine exact progress. */
   percent?: number;
-  /** 現在の処理状況 */
+  /** Current processing phase */
   phase: 'starting' | 'converting' | 'completed' | 'failed';
 }
 
-/** フォルダ選択ダイアログの結果 */
+/** Result of the folder selection dialog */
 export interface SelectFolderResult {
   canceled: boolean;
   folderPath?: string;
 }
 
-/** macOS等での権限状態 */
+/** Permission status, used on macOS etc. */
 export type MediaPermissionStatus =
   | 'granted'
   | 'denied'
@@ -169,18 +175,19 @@ export type MediaPermissionStatus =
   | 'unsupported';
 
 /**
- * 実行中のOSによって異なる機能差を、renderer側が判断するための情報。
- * 「機能ごとにif分岐する」のではなく、この型を見てUIを切り替える設計にする。
+ * Information that lets the renderer decide on feature differences across OSes.
+ * Rather than branching with "if" per feature, the UI is designed to switch
+ * based on this type.
  */
 export interface PlatformCapabilities {
   platform: 'win32' | 'darwin' | 'linux';
-  /** システム音声のループバック録音が可能か（Windows/macOS13+で対応、Linuxは原則false） */
+  /** Whether system audio loopback recording is available (supported on Windows/macOS 13+, generally false on Linux) */
   systemAudioLoopbackSupported: boolean;
   screenCapturePermission: MediaPermissionStatus;
   microphonePermission: MediaPermissionStatus;
 }
 
-/** 録画履歴の1件分のメタデータ */
+/** Metadata for a single recording history entry */
 export interface RecordingHistoryItem {
   id: string;
   filePath: string;
@@ -188,13 +195,13 @@ export interface RecordingHistoryItem {
   format: OutputFormat;
   createdAt: number;
   durationMs: number;
-  /** ファイルサイズ(バイト)。取得できなければundefined */
+  /** File size in bytes. Undefined if it could not be retrieved. */
   fileSizeBytes?: number;
 }
 
 /**
- * アプリ内で発生し得るエラーを種別化するためのコード。
- * UI側でユーザーフレンドリーなメッセージに変換するために使う。
+ * Codes used to categorize errors that can occur within the app.
+ * Used by the UI to convert them into user-friendly messages.
  */
 export type AppErrorCode =
   | 'SOURCE_NOT_FOUND'
@@ -212,6 +219,6 @@ export type AppErrorCode =
 export interface AppError {
   code: AppErrorCode;
   message: string;
-  /** デバッグ用の詳細情報（スタックトレース等） */
+  /** Debug details (e.g. stack trace) */
   details?: string;
 }

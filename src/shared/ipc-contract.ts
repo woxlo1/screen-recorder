@@ -11,8 +11,9 @@ import type {
 } from './types';
 
 /**
- * IPCチャンネル名を一箇所に集約する。
- * 文字列リテラルのタイプミスを防ぎ、main/preload/renderer 全体で同じ定数を使う。
+ * Centralizes IPC channel names in one place.
+ * Prevents string-literal typos and lets main/preload/renderer all share the
+ * same constants.
  */
 export const IpcChannels = {
   GetSources: 'recorder:getSources',
@@ -32,11 +33,13 @@ export const IpcChannels = {
 } as const;
 
 /**
- * main → renderer への一方向通知チャンネル（ipcMain.handle ではなく webContents.send で送る）。
- * invoke系のIpcChannelsとは別管理にすることで、リクエスト/レスポンス型を持たないことを明示する。
+ * One-way notification channels from main to renderer (sent via webContents.send
+ * rather than handled with ipcMain.handle).
+ * Kept separate from the invoke-style IpcChannels to make explicit that these
+ * channels have no request/response type.
  */
 export const IpcEvents = {
-  /** MP4変換(FFmpeg)の進捗通知。Phase3で追加 */
+  /** MP4 conversion (FFmpeg) progress notification. Added in Phase 3 */
   ConversionProgress: 'recorder:conversionProgress',
 } as const;
 
@@ -45,9 +48,9 @@ export type IpcEvent = (typeof IpcEvents)[keyof typeof IpcEvents];
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels];
 
 /**
- * 各チャンネルの「リクエスト引数」と「戻り値」の型を定義するマップ。
- * preload の invoke ラッパーと main の handle 実装の両方がこの型に従うことで、
- * シグネチャのズレをコンパイル時に検出できる。
+ * Map defining the "request argument" and "return value" types for each channel.
+ * Having both the preload invoke wrapper and the main handle implementation follow
+ * this type lets signature mismatches be caught at compile time.
  */
 export interface IpcContract {
   [IpcChannels.GetSources]: {
@@ -60,9 +63,9 @@ export interface IpcContract {
   };
   [IpcChannels.StopRecording]: {
     /**
-     * renderer 側の MediaRecorder で生成された WebM データ本体と録画時間。
-     * MediaRecorder自体はブラウザAPIのためrendererでしか動かせないが、
-     * ファイルI/Oはmainプロセスに集約する設計。
+     * The WebM data and recording duration produced by the renderer-side
+     * MediaRecorder. MediaRecorder itself is a browser API and can only run in
+     * the renderer, but the design centralizes file I/O in the main process.
      */
     request: { buffer: ArrayBuffer; durationMs: number };
     response: StopRecordingResult;
@@ -113,7 +116,7 @@ export interface IpcContract {
   };
 }
 
-/** 指定チャンネルのリクエスト型を取り出すユーティリティ型 */
+/** Utility type that extracts the request type for a given channel */
 export type IpcRequest<C extends IpcChannel> = IpcContract[C]['request'];
-/** 指定チャンネルのレスポンス型を取り出すユーティリティ型 */
+/** Utility type that extracts the response type for a given channel */
 export type IpcResponse<C extends IpcChannel> = IpcContract[C]['response'];
