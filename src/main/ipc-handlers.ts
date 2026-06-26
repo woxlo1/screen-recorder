@@ -109,10 +109,15 @@ export function registerIpcHandlers(): void {
 
       try {
         const ext = request.save.format === 'mp4' ? 'mp4' : 'webm';
-        const fileName = `${sanitizeFileName(request.save.fileNameTemplate)}.${ext}`;
-        const destPath = path.join(request.save.outputDirectory, fileName);
 
         await fs.mkdir(request.save.outputDirectory, { recursive: true });
+
+        // ファイル名にタイムスタンプを付与し、前回の録画ファイルが上書きされないようにする
+        const destPath = await buildUniqueOutputPath(
+          request.save.outputDirectory,
+          request.save.fileNameTemplate,
+          ext,
+        );
 
         if (request.save.format === 'mp4') {
           if (!isFfmpegAvailable()) {
@@ -159,7 +164,7 @@ export function registerIpcHandlers(): void {
         persistentStore.addHistoryItem({
           id: crypto.randomUUID(),
           filePath: destPath,
-          fileName,
+          fileName: path.basename(destPath),
           format: request.save.format,
           durationMs: request.durationMs,
           createdAt: Date.now(),
@@ -248,4 +253,44 @@ export function registerIpcHandlers(): void {
 function sanitizeFileName(name: string): string {
   const trimmed = name.trim() || 'recording';
   return trimmed.replace(/[\\/:*?"<>|]/g, '_');
+}
+
+/** ファイル名に使える形式のタイムスタンプ文字列 (例: 2024-06-01_21-30-15) を生成する */
+function formatTimestampForFileName(date: Date): string {
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}_${pad(
+    date.getHours(),
+  )}-${pad(date.getMinutes())}-${pad(date.getSeconds())}`;
+}
+
+/**
+ * 保存先ディレクトリ内で重複しないファイルパスを生成する。
+ * テンプレート名に日時を付与することで、同じテンプレート名でも毎回別ファイルとして保存され、
+ * 過去の録画が上書き・消失することを防ぐ。万一それでも衝突する場合は連番を付与する。
+ */
+async function buildUniqueOutputPath(
+  outputDirectory: string,
+  fileNameTemplate: string,
+  extension: string,
+): Promise<string> {
+  const base = sanitizeFileName(fileNameTemplate);
+  const timestamp = formatTimestampForFileName(new Date());
+  let candidate = path.join(outputDirectory, `${base}_${timestamp}.${extension}`);
+  let suffix = 1;
+
+  while (await fileExists(candidate)) {
+    candidate = path.join(outputDirectory, `${base}_${timestamp}_${suffix}.${extension}`);
+    suffix += 1;
+  }
+
+  return candidate;
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
