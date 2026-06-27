@@ -7,12 +7,14 @@ import { AudioPanel } from './features/audio/AudioPanel';
 import { SettingsScreen } from './features/settings/SettingsScreen';
 import { HistoryPanel } from './features/history/HistoryPanel';
 import { LanguageSwitcher } from './features/settings/LanguageSwitcher';
+import { UpdateBanner } from './features/settings/UpdateBanner';
 import { useRecorderStore } from './store/recorderStore';
 import { useTranslation } from './i18n';
 import {
   useAppBootstrap,
   useSettingsAutoSave,
   useConversionProgress,
+  useUpdateStatus,
 } from './hooks/useAppBootstrap';
 
 export function App() {
@@ -33,6 +35,8 @@ export function App() {
   useSettingsAutoSave();
   // Subscribe to MP4 conversion (FFmpeg) progress events (Phase 3)
   useConversionProgress();
+  // Subscribe to auto-update status events (electron-updater)
+  useUpdateStatus();
 
   /** After recording stops, saves the temporary WebM file to its final destination (also runs FFmpeg conversion if the format is mp4) */
   const handleRecordingStopped = async (tempFilePath: string, durationMs: number) => {
@@ -97,6 +101,8 @@ export function App() {
           </button>
         </div>
       </header>
+
+      <UpdateBanner />
 
       {macScreenPermissionDenied && (
         <div className="border-b border-yellow-900 bg-yellow-950/50 px-6 py-2 text-sm text-yellow-200">

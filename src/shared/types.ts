@@ -222,3 +222,28 @@ export interface AppError {
   /** Debug details (e.g. stack trace) */
   details?: string;
 }
+
+/**
+ * State of the auto-update flow (electron-updater).
+ * Mirrors electron-updater's own event names so the renderer can render a
+ * single status string without needing to know electron-updater's API.
+ */
+export type UpdateStatus =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error';
+
+/** One-way notification payload sent from main to renderer as update status changes. */
+export interface UpdateStatusPayload {
+  status: UpdateStatus;
+  /** Version string of the update found on the server (only set once an update is found) */
+  version?: string;
+  /** Download progress percentage (0-100), only present while status is 'downloading' */
+  percent?: number;
+  /** Error message, only present when status is 'error' */
+  errorMessage?: string;
+}

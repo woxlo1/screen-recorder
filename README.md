@@ -1,5 +1,47 @@
 # Screen Recorder (Screen recording app for Windows / macOS)
 
+## Added in the auto-update feature
+
+- **Automatic updates via GitHub Releases (`electron-updater`)**
+  - On startup (a few seconds after launch) and whenever the user clicks
+    "Check for Updates" in the Settings screen, the app checks GitHub
+    Releases for a newer version than the one currently installed.
+  - If a newer version is found, it's downloaded automatically in the
+    background; the app's own UI is not blocked while this happens.
+  - Once the download finishes, a green banner appears at the top of the app
+    asking the user to restart now (`quitAndInstall`) or dismiss it for now
+    ("Later"). Choosing "Later" still installs the update automatically the
+    next time the app is quit (`autoInstallOnAppQuit`).
+  - Implemented in `src/main/auto-updater.ts` (wraps `electron-updater` and
+    forwards status changes to the renderer over IPC as a single
+    `UpdateStatusPayload`), with the corresponding renderer-side banner in
+    `src/renderer/features/settings/UpdateBanner.tsx`.
+  - **What you need to set up before this works for your own build:**
+    1. Replace `YOUR_GITHUB_USERNAME` / `YOUR_REPO_NAME` in both
+       `package.json` (`repository.url`) and `electron-builder.json`
+       (`publish.owner` / `publish.repo`) with your actual GitHub username
+       and repository name.
+    2. Push your code to that GitHub repository.
+    3. Set a `GH_TOKEN` environment variable to a GitHub personal access
+       token with permission to create releases on that repo, then run
+       `npm run release:win` / `npm run release:mac` (see "Production build"
+       below) to build and publish a release in one step.
+    4. Bump the `version` field in `package.json` before each release —
+       `electron-updater` compares against this value, so a release won't be
+       detected as "newer" unless the version number is actually higher.
+  - **Without code signing**, this still works end-to-end, but:
+    - On **macOS**, an unsigned, non-notarized `.app` will be blocked by
+      Gatekeeper for anyone who isn't you, both on first install and when
+      auto-update tries to replace it. For real distribution to other
+      people, Apple Developer Program signing + notarization is effectively
+      required (see "Notes for running on macOS" below).
+    - On **Windows**, an unsigned installer will trigger a SmartScreen
+      warning, but auto-update itself (replacing the files after download)
+      works without a certificate.
+  - macOS auto-updates are driven by the `zip` artifact (not the `dmg`); the
+    `dmg` exists only as a convenient manual-install option and is not used
+    by `electron-updater`'s update-checking flow.
+
 ## Added in the i18n update
 
 - **UI language switcher (English / Japanese)**
@@ -118,6 +160,24 @@ npm run build:mac   # macOS (.dmg / .zip, arm64 + x64)
 
 Output is written to the `release/` folder.
 
+### Publishing a release (for auto-update)
+
+```bash
+# Requires GH_TOKEN to be set to a GitHub personal access token with
+# permission to create releases on the repo configured in
+# electron-builder.json's `publish` field.
+export GH_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
+
+npm run release:win   # builds AND uploads a GitHub Release (Windows)
+npm run release:mac   # builds AND uploads a GitHub Release (macOS)
+```
+
+These create a (draft, by default) GitHub Release with the installers
+attached, plus the small metadata files (`latest.yml` / `latest-mac.yml`)
+that `electron-updater` reads to detect whether a newer version exists.
+Remember to bump `version` in `package.json` first — see "Added in the
+auto-update feature" above.
+
 > **Note:** `build/icon.ico` / `build/icon.icns` are not provided yet.
 > Place your app icon before building (electron-builder's default icon will
 > be used otherwise).
@@ -165,6 +225,7 @@ src/
     ffmpeg-binary.ts               # Resolves the real FFmpeg binary path (Phase 3)
     ffmpeg-converter.ts             # WebM -> MP4 conversion logic (Phase 3)
     messages.ts                      # Localized main-process strings (i18n update)
+    auto-updater.ts                   # electron-updater wrapper, broadcasts UpdateStatusPayload (auto-update feature)
   preload/
     index.ts                     # Exposes window.electronAPI via contextBridge
   renderer/
@@ -173,12 +234,14 @@ src/
       recorder/                  # Recording logic/UI (ConversionProgressBar is Phase 3)
       audio/                      # Audio settings UI
       settings/                    # Settings screen (format/codec selection is Phase 3;
-                                     # LanguageSwitcher is the i18n update)
+                                     # LanguageSwitcher is the i18n update;
+                                     # UpdateBanner is the auto-update feature)
       history/                      # Recording history panel (Phase 2)
     i18n/                           # Translation dictionaries, useTranslation()/translate() (i18n update)
     hooks/
       useAppBootstrap.ts            # Loads settings/history on startup, subscribes to
-                                      # conversion progress (Phase 2/3)
+                                      # conversion progress (Phase 2/3) and update status
+                                      # (auto-update feature)
     store/
       recorderStore.ts               # Zustand
     types/

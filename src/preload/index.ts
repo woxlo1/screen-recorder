@@ -1,7 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IpcChannels, IpcEvents } from '../shared/ipc-contract';
 import type { IpcRequest, IpcResponse } from '../shared/ipc-contract';
-import type { AppSettings, ConversionProgress, SaveVideoRequest } from '../shared/types';
+import type {
+  AppSettings,
+  ConversionProgress,
+  SaveVideoRequest,
+  UpdateStatusPayload,
+} from '../shared/types';
 
 /**
  * Helper that wraps invoke calls in a type-safe way.
@@ -65,6 +70,21 @@ const electronAPI = {
     ipcRenderer.on(IpcEvents.ConversionProgress, listener);
     return () => {
       ipcRenderer.removeListener(IpcEvents.ConversionProgress, listener);
+    };
+  },
+
+  // --- Auto-update (electron-updater) -----------------------------------
+  checkForUpdates: () => invoke(IpcChannels.CheckForUpdates),
+  quitAndInstallUpdate: () => invoke(IpcChannels.QuitAndInstallUpdate),
+  getAppVersion: () => invoke(IpcChannels.GetAppVersion),
+  /** Subscribes to update-status changes (checking/available/downloading/downloaded/error). */
+  onUpdateStatus: (callback: (payload: UpdateStatusPayload) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: UpdateStatusPayload): void => {
+      callback(payload);
+    };
+    ipcRenderer.on(IpcEvents.UpdateStatus, listener);
+    return () => {
+      ipcRenderer.removeListener(IpcEvents.UpdateStatus, listener);
     };
   },
 };

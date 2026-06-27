@@ -22,8 +22,13 @@
       "@preload/*": ["src/preload/*"],
       "@renderer/*": ["src/renderer/*"],
       "@shared/*": ["src/shared/*"]
-    }
+    },
+    // outDir keeps `tsc -b`'s emitted .js files out of src/ (Vite does the actual
+    // bundling/transpilation separately; this output is only a side effect of
+    // running tsc in build mode and is never consumed by anything).
+    "outDir": "./.tsc-out",
+    "noEmit": false
   },
   "include": ["src"],
-  "exclude": ["node_modules", "dist", "dist-electron", "release"]
+  "exclude": ["node_modules", "dist", "dist-electron", "release", ".tsc-out"]
 }

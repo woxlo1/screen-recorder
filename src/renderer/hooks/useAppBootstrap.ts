@@ -78,3 +78,22 @@ export function useConversionProgress(): void {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 }
+
+/**
+ * Hook that reflects auto-update status events (electron-updater, forwarded
+ * from main) into the store. Should be subscribed exactly once for the whole
+ * app, so it's called from the top level of App.tsx alongside
+ * useConversionProgress.
+ */
+export function useUpdateStatus(): void {
+  const setUpdateStatus = useRecorderStore((s) => s.setUpdateStatus);
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onUpdateStatus((payload) => {
+      setUpdateStatus(payload);
+    });
+    return unsubscribe;
+    // Subscribe/unsubscribe only on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+}

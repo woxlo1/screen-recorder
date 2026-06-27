@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow, shell } from 'electron';
+import { ipcMain, dialog, BrowserWindow, shell, app } from 'electron';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -21,6 +21,7 @@ import { getPlatformCapabilities, requestMicrophonePermission } from './permissi
 import { convertWebmToMp4, FfmpegConversionError } from './ffmpeg-converter';
 import { isFfmpegAvailable } from './ffmpeg-binary';
 import { mt } from './messages';
+import { checkForUpdates, quitAndInstall } from './auto-updater';
 
 /** Helper for building an AppError. Safely converts a caught `unknown` into an AppError. */
 function toAppError(code: AppError['code'], error: unknown): AppError {
@@ -256,6 +257,28 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IpcChannels.RequestMicrophonePermission, async () => {
     const granted = await requestMicrophonePermission();
     return { granted };
+  });
+
+  // --- Auto-update (electron-updater) -----------------------------------
+  ipcMain.handle(IpcChannels.CheckForUpdates, async () => {
+    try {
+      await checkForUpdates();
+      return { success: true };
+    } catch (error) {
+      console.error('[ipc] checkForUpdates failed', error);
+      return {
+        success: false,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+
+  ipcMain.handle(IpcChannels.QuitAndInstallUpdate, () => {
+    quitAndInstall();
+  });
+
+  ipcMain.handle(IpcChannels.GetAppVersion, () => {
+    return { version: app.getVersion() };
   });
 }
 

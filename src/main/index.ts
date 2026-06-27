@@ -5,6 +5,7 @@ import { persistentStore } from './persistent-store';
 import { getDefaultOutputDir } from './paths';
 import { logFfmpegPath } from './ffmpeg-binary';
 import { recordingStateManager } from './recording-state';
+import { initializeAutoUpdater, checkForUpdates } from './auto-updater';
 
 // The main process is built as CommonJS, so __dirname is automatically injected by
 // Node.js and can be used as-is (the ESM equivalent, fileURLToPath(import.meta.url),
@@ -118,6 +119,15 @@ app.whenReady().then(() => {
   logFfmpegPath();
   registerIpcHandlers();
   createMainWindow();
+  initializeAutoUpdater();
+  // Check for an update shortly after launch. Delayed slightly so it doesn't
+  // compete with the app's own startup work, and wrapped in catch since a
+  // failed check (e.g. offline) shouldn't be treated as fatal.
+  setTimeout(() => {
+    void checkForUpdates().catch((error) => {
+      console.error('[auto-updater] initial check failed', error);
+    });
+  }, 3000);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

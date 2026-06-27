@@ -105,6 +105,16 @@ export const en = {
     open: 'Open',
     delete: 'Delete',
   },
+  update: {
+    downloading: 'Downloading update {version}… {percent}%',
+    downloaded: 'Update {version} is ready. Restart now to install it?',
+    restartNow: 'Restart Now',
+    later: 'Later',
+    errorBanner: 'Could not check for updates.',
+    checkButton: 'Check for Updates',
+    checking: 'Checking for updates…',
+    upToDate: "You're up to date.",
+  },
   errors: {
     sourceNotSelected: 'No recording source is selected',
     startFailed: 'Failed to start recording',
@@ -210,6 +220,16 @@ export const ja: Translations = {
     empty: 'まだ録画履歴がありません。',
     open: '開く',
     delete: '削除',
+  },
+  update: {
+    downloading: 'アップデート {version} をダウンロード中… {percent}%',
+    downloaded: 'アップデート {version} の準備ができました。今すぐ再起動してインストールしますか？',
+    restartNow: '今すぐ再起動',
+    later: '後で',
+    errorBanner: 'アップデートの確認に失敗しました。',
+    checkButton: 'アップデートを確認',
+    checking: 'アップデートを確認中…',
+    upToDate: '最新の状態です。',
   },
   errors: {
     sourceNotSelected: '録画ソースが選択されていません',

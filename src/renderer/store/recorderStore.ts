@@ -8,6 +8,7 @@ import type {
   RecordingHistoryItem,
   RecordingStatus,
   SupportedLanguage,
+  UpdateStatusPayload,
 } from '../../shared/types';
 import { DEFAULT_APP_SETTINGS } from '../../shared/types';
 
@@ -41,6 +42,14 @@ interface RecorderState {
    * null means there is no error.
    */
   recordingError: string | null;
+  /**
+   * Latest auto-update status reported by the main process (electron-updater).
+   * null until the first status event arrives (i.e. before any update check
+   * has run).
+   */
+  updateStatus: UpdateStatusPayload | null;
+  /** Whether the user dismissed the "update downloaded" banner with "Later" (re-shown on next launch, not re-shown again this session) */
+  updateBannerDismissed: boolean;
 
   // --- actions ---
   setAvailableSources: (sources: CaptureSource[]) => void;
@@ -58,6 +67,8 @@ interface RecorderState {
   setHistory: (history: RecordingHistoryItem[]) => void;
   setConversionProgress: (progress: ConversionProgress | null) => void;
   setRecordingError: (message: string | null) => void;
+  setUpdateStatus: (status: UpdateStatusPayload) => void;
+  dismissUpdateBanner: () => void;
   reset: () => void;
 }
 
@@ -77,6 +88,8 @@ export const useRecorderStore = create<RecorderState>((set) => ({
   history: [],
   conversionProgress: null,
   recordingError: null,
+  updateStatus: null,
+  updateBannerDismissed: false,
 
   setAvailableSources: (sources) => set({ availableSources: sources }),
 
@@ -123,6 +136,16 @@ export const useRecorderStore = create<RecorderState>((set) => ({
   setConversionProgress: (progress) => set({ conversionProgress: progress }),
 
   setRecordingError: (message) => set({ recordingError: message }),
+
+  setUpdateStatus: (status) =>
+    set((state) => ({
+      updateStatus: status,
+      // A fresh 'downloading'/'available' cycle should be able to show the
+      // banner again even if a previous "downloaded" banner was dismissed.
+      updateBannerDismissed: status.status === 'downloaded' ? state.updateBannerDismissed : false,
+    })),
+
+  dismissUpdateBanner: () => set({ updateBannerDismissed: true }),
 
   reset: () =>
     set({

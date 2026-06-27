@@ -5,12 +5,18 @@
   "main": "dist-electron/main/index.cjs",
   "private": true,
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME.git"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build && electron-builder",
     "build:win": "tsc -b && vite build && electron-builder --win",
     "build:mac": "tsc -b && vite build && electron-builder --mac",
     "build:dir": "tsc -b && vite build && electron-builder --dir",
+    "release:win": "tsc -b && vite build && electron-builder --win --publish always",
+    "release:mac": "tsc -b && vite build && electron-builder --mac --publish always",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "typecheck": "tsc -b --noEmit"
@@ -20,7 +26,8 @@
     "ffmpeg-static": "^5.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "zustand": "^4.5.2"
+    "zustand": "^4.5.2",
+    "electron-updater": "^6.3.0"
   },
   "devDependencies": {
     "@types/fluent-ffmpeg": "^2.1.24",

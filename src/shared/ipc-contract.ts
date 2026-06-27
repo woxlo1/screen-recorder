@@ -30,6 +30,10 @@ export const IpcChannels = {
   OpenFileLocation: 'history:openFileLocation',
   LoadSettings: 'settings:load',
   SaveSettings: 'settings:save',
+  /** Auto-update (electron-updater). Added in the auto-update feature */
+  CheckForUpdates: 'update:check',
+  QuitAndInstallUpdate: 'update:quitAndInstall',
+  GetAppVersion: 'update:getAppVersion',
 } as const;
 
 /**
@@ -41,6 +45,8 @@ export const IpcChannels = {
 export const IpcEvents = {
   /** MP4 conversion (FFmpeg) progress notification. Added in Phase 3 */
   ConversionProgress: 'recorder:conversionProgress',
+  /** Auto-update status changes (checking/available/downloading/downloaded/error) */
+  UpdateStatus: 'update:status',
 } as const;
 
 export type IpcEvent = (typeof IpcEvents)[keyof typeof IpcEvents];
@@ -113,6 +119,18 @@ export interface IpcContract {
   [IpcChannels.SaveSettings]: {
     request: AppSettings;
     response: { success: boolean };
+  };
+  [IpcChannels.CheckForUpdates]: {
+    request: void;
+    response: { success: boolean; errorMessage?: string };
+  };
+  [IpcChannels.QuitAndInstallUpdate]: {
+    request: void;
+    response: void;
+  };
+  [IpcChannels.GetAppVersion]: {
+    request: void;
+    response: { version: string };
   };
 }
 

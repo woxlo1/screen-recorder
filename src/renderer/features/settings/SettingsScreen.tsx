@@ -245,8 +245,52 @@ export function SettingsScreen({ onClose }: SettingsScreenProps) {
               className="w-full"
             />
           </section>
+
+          {/* Updates */}
+          <UpdateCheckSection />
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Lets the user manually trigger an update check and shows the result inline.
+ * Kept as a separate component (rather than inline JSX in SettingsScreen) so
+ * its own local "just checked" state doesn't re-render the rest of the
+ * settings form.
+ */
+function UpdateCheckSection() {
+  const { t } = useTranslation();
+  const updateStatus = useRecorderStore((s) => s.updateStatus);
+  const [checking, setChecking] = useState(false);
+
+  const handleCheck = async () => {
+    setChecking(true);
+    try {
+      await window.electronAPI.checkForUpdates();
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const statusLabel = (() => {
+    if (checking || updateStatus?.status === 'checking') return t('update.checking');
+    if (updateStatus?.status === 'not-available') return t('update.upToDate');
+    if (updateStatus?.status === 'error') return t('update.errorBanner');
+    return null;
+  })();
+
+  return (
+    <section>
+      <button
+        onClick={() => void handleCheck()}
+        disabled={checking}
+        className="w-full rounded bg-gray-800 px-3 py-2 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-60"
+      >
+        {t('update.checkButton')}
+      </button>
+      {statusLabel && <p className="mt-1 text-center text-xs text-gray-500">{statusLabel}</p>}
+    </section>
   );
 }

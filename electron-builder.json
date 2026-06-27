@@ -1,18 +1,15 @@
 {
   "appId": "com.example.screenrecorder",
   "productName": "ScreenRecorder",
-  "files": [
-    "dist/**/*",
-    "dist-electron/**/*",
-    "node_modules/ffmpeg-static/**/*",
-    "node_modules/fluent-ffmpeg/**/*",
-    "node_modules/async/**/*",
-    "node_modules/which/**/*",
-    "node_modules/isexe/**/*"
-  ],
+  "files": ["dist/**/*", "dist-electron/**/*"],
   "asarUnpack": ["node_modules/ffmpeg-static/**"],
   "directories": {
     "output": "release"
+  },
+  "publish": {
+    "provider": "github",
+    "owner": "YOUR_GITHUB_USERNAME",
+    "repo": "YOUR_REPO_NAME"
   },
   "win": {
     "target": ["nsis"],

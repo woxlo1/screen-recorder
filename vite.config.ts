@@ -12,34 +12,39 @@ export default defineConfig({
         vite: {
           build: {
             outDir: 'dist-electron/main',
-            // mainプロセスはCommonJSとしてビルドする。
-            // package.jsonの "type": "module" の場合、vite-plugin-electronは
-            // build.lib.formats を自動的に ["es"] にしてしまうため、Library Mode の
-            // formats を明示的に上書きしてCJSに固定する必要がある
-            // (rollupOptions.output.format だけではlib modeのformatsに上書きされて効かない)。
-            // 依存パッケージ(fluent-ffmpeg, ffmpeg-static)がCJS前提で内部的に __dirname を
-            // 参照している箇所があり、ESM出力のままだと「__dirname is not defined」で
-            // 実行時エラーになるため、この対処が必須。
+            // Build the main process as CommonJS.
+            // With "type": "module" in package.json, vite-plugin-electron automatically
+            // forces build.lib.formats to ["es"], so the library-mode formats must be
+            // explicitly overridden back to CJS here (rollupOptions.output.format alone
+            // doesn't take effect, since it gets overridden by lib mode's formats).
+            // Several dependencies (fluent-ffmpeg, ffmpeg-static, electron-updater)
+            // internally rely on __dirname under a CJS assumption, and would fail at
+            // runtime with "__dirname is not defined" if left as ESM output, so this
+            // override is required.
             //
-            // さらに、Node.js/Electronは「ファイルの中身」ではなく「拡張子 + package.jsonの
-            // type フィールド」だけでESM/CJSを判定するため、中身がCJSコードでも拡張子が
-            // `.js` のままだと package.json の "type": "module" の影響で
-            // 「require is not defined in ES module scope」になる。
-            // これを避けるため出力ファイル自体の拡張子を `.cjs` に固定する
-            // (拡張子 `.cjs` は package.json の type 設定に関わらず常にCommonJSとして扱われる)。
+            // In addition, Node.js/Electron decides ESM vs. CJS purely from "file
+            // extension + the package.json `type` field", not from the file's actual
+            // content. So even though the emitted code is CJS, leaving the extension as
+            // `.js` would still trigger "require is not defined in ES module scope"
+            // because of the "type": "module" setting in package.json.
+            // To avoid that, the output file's extension itself is pinned to `.cjs`
+            // (the `.cjs` extension is always treated as CommonJS regardless of the
+            // package.json `type` setting).
             lib: {
               entry: 'src/main/index.ts',
               formats: ['cjs'],
               fileName: () => 'index.cjs',
             },
             rollupOptions: {
-              // ffmpeg-static / fluent-ffmpeg はバンドルに含めず、実行時にnode_modulesから
-              // require させる。これらのパッケージは内部で `__dirname` を使って自身の
-              // パッケージディレクトリ(node_modules/ffmpeg-static等)を基準にバイナリや
-              // presetsフォルダのパスを解決している。バンドルに含めてしまうと、その
-              // `__dirname` がバンドル後の出力先(dist-electron/main)を指すようになってしまい、
-              // 「FFmpegの実行ファイルが見つかりません」のように誤ったパスを参照してしまう。
-              external: ['ffmpeg-static', 'fluent-ffmpeg'],
+              // Keep ffmpeg-static / fluent-ffmpeg / electron-updater out of the bundle
+              // and let them be require()'d from node_modules at runtime instead.
+              // These packages internally use `__dirname` to resolve paths (binaries,
+              // preset folders, their own config files) relative to their own package
+              // directory under node_modules. If they were bundled, that `__dirname`
+              // would end up pointing at the bundle's own output location
+              // (dist-electron/main) instead, causing them to resolve the wrong path
+              // (e.g. "FFmpeg executable not found").
+              external: ['ffmpeg-static', 'fluent-ffmpeg', 'electron-updater'],
             },
           },
         },
@@ -49,8 +54,9 @@ export default defineConfig({
         vite: {
           build: {
             outDir: 'dist-electron/preload',
-            // preloadも同じ理由で `.cjs` に固定する。
-            // main/index.ts側で `.cjs` 拡張子のパスを指定する必要があるため、出力もここで揃える。
+            // Pin the preload output to `.cjs` too, for the same reason as above.
+            // main/index.ts needs to reference a `.cjs` path, so the output is kept
+            // consistent with that here.
             rollupOptions: {
               output: {
                 format: 'cjs',
