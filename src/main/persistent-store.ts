@@ -87,6 +87,12 @@ class PersistentStore {
     this.persist();
   }
 
+  setHistory(items: RecordingHistoryItem[]): void {
+    const data = this.load();
+    data.history = items;
+    this.persist();
+  }
+
   clearHistory(): void {
     const data = this.load();
     data.history = [];

@@ -227,12 +227,55 @@ export function registerIpcHandlers(): void {
 
   // --- Recording history ----------------------------------------------------
   ipcMain.handle(IpcChannels.GetRecordingHistory, async () => {
-    return persistentStore.getHistory();
+    const history = persistentStore.getHistory();
+
+    // The recording file may have been deleted outside the app (e.g. via
+    // Explorer/Finder, or by some other cleanup tool). Reconcile the stored
+    // history against the filesystem so stale entries pointing at files
+    // that no longer exist don't linger in the list forever.
+    const stillExisting: typeof history = [];
+    let removedAny = false;
+
+    for (const item of history) {
+      try {
+        await fs.access(item.filePath);
+        stillExisting.push(item);
+      } catch {
+        removedAny = true;
+      }
+    }
+
+    if (removedAny) {
+      persistentStore.setHistory(stillExisting);
+    }
+
+    return stillExisting;
   });
 
   ipcMain.handle(
     IpcChannels.DeleteRecordingHistoryItem,
     async (_event, payload: { id: string }) => {
+      // Look up the file path before removing the metadata entry, so the
+      // underlying recording file on disk is deleted along with it (rather
+      // than just disappearing from the history list while still taking up
+      // space).
+      const item = persistentStore.getHistory().find((entry) => entry.id === payload.id);
+
+      if (item) {
+        try {
+          await fs.unlink(item.filePath);
+        } catch (error) {
+          // ENOENT just means the file was already gone (e.g. moved/deleted
+          // outside the app) -- not worth failing the whole operation for.
+          // Any other error (e.g. permissions, file in use) is logged but
+          // still doesn't block removing the history entry itself.
+          const code = (error as { code?: string }).code;
+          if (code !== 'ENOENT') {
+            console.error('[ipc] failed to delete recording file', item.filePath, error);
+          }
+        }
+      }
+
       persistentStore.deleteHistoryItem(payload.id);
       return { success: true };
     },
