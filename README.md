@@ -22,13 +22,16 @@
        (`publish.owner` / `publish.repo`) with your actual GitHub username
        and repository name.
     2. Push your code to that GitHub repository.
-    3. Set a `GH_TOKEN` environment variable to a GitHub personal access
-       token with permission to create releases on that repo, then run
-       `npm run release:win` / `npm run release:mac` (see "Production build"
-       below) to build and publish a release in one step.
+    3. Publish a release — either by pushing a version tag (GitHub Actions
+       builds and publishes both platforms automatically, no secrets
+       required) or by running `npm run release:win` / `npm run release:mac`
+       locally with a `GH_TOKEN` set. See "Publishing a release" under
+       "Production build" below for both options.
     4. Bump the `version` field in `package.json` before each release —
        `electron-updater` compares against this value, so a release won't be
        detected as "newer" unless the version number is actually higher.
+       Running `npm version <new-version>` does this (and creates the
+       matching git tag) in one step.
   - **Without code signing**, this still works end-to-end, but:
     - On **macOS**, an unsigned, non-notarized `.app` will be blocked by
       Gatekeeper for anyone who isn't you, both on first install and when
@@ -162,21 +165,49 @@ Output is written to the `release/` folder.
 
 ### Publishing a release (for auto-update)
 
+There are two ways to publish a release; the GitHub Actions workflow is
+recommended since it doesn't require a personal access token or a machine of
+each OS on your end.
+
+#### Option A: GitHub Actions (recommended)
+
+A workflow at `.github/workflows/release.yml` builds both the Windows and
+macOS installers and publishes them to a GitHub Release automatically,
+triggered by pushing a version tag. No secrets need to be configured — it
+uses the repository's built-in `GITHUB_TOKEN`.
+
+```bash
+npm version 0.2.0      # bumps package.json's version, commits, and creates tag v0.2.0
+git push --follow-tags # pushes the commit AND the tag, which triggers the workflow
+```
+
+Open the "Actions" tab on GitHub to watch the build progress. Once both jobs
+finish, the new version (with installers and the `latest.yml` /
+`latest-mac.yml` metadata files `electron-updater` reads) will be live on the
+repo's "Releases" page.
+
+> The first time you set this up, double check that `electron-builder.json`'s
+> `publish.owner` / `publish.repo` and `package.json`'s `repository.url`
+> point at your actual GitHub username/repository — see "Added in the
+> auto-update feature" above.
+
+#### Option B: Publish manually from your own machine
+
 ```bash
 # Requires GH_TOKEN to be set to a GitHub personal access token with
 # permission to create releases on the repo configured in
 # electron-builder.json's `publish` field.
-export GH_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
+export GH_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx        # macOS/Linux (bash)
+# $env:GH_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxx"       # Windows (PowerShell)
 
 npm run release:win   # builds AND uploads a GitHub Release (Windows)
 npm run release:mac   # builds AND uploads a GitHub Release (macOS)
 ```
 
-These create a (draft, by default) GitHub Release with the installers
-attached, plus the small metadata files (`latest.yml` / `latest-mac.yml`)
-that `electron-updater` reads to detect whether a newer version exists.
-Remember to bump `version` in `package.json` first — see "Added in the
-auto-update feature" above.
+Either option creates a (draft, by default) GitHub Release with the
+installers attached, plus the small metadata files (`latest.yml` /
+`latest-mac.yml`) that `electron-updater` reads to detect whether a newer
+version exists.
 
 > **Note:** `build/icon.ico` / `build/icon.icns` are not provided yet.
 > Place your app icon before building (electron-builder's default icon will

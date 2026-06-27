@@ -1,0 +1,60 @@
+name: Release
+
+# Triggered by pushing a version tag, e.g.:
+#   git tag v0.2.0
+#   git push origin v0.2.0
+#
+# Builds the Windows and macOS installers on their respective native
+# runners (electron-builder can't cross-compile macOS builds from Windows
+# or Linux, and vice versa) and publishes both to a GitHub Release matching
+# the tag, using electron-builder's built-in GitHub publish support.
+#
+# Required setup (one-time):
+#   - electron-builder.json's `publish.owner` / `publish.repo` must point at
+#     this repository.
+#   - No extra secrets need to be configured: the built-in GITHUB_TOKEN is
+#     used (see the `permissions` block below), which electron-builder reads
+#     automatically. A personal GH_TOKEN is only needed for *local* releases
+#     run from a developer machine (see README.md).
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # required so electron-builder can create/upload the GitHub Release
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build and publish (Windows)
+        run: npm run release:win
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build and publish (macOS)
+        run: npm run release:mac
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
