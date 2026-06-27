@@ -9,7 +9,8 @@
   "publish": {
     "provider": "github",
     "owner": "woxlo1",
-    "repo": "screen-recorder"
+    "repo": "screen-recorder",
+    "releaseType": "release"
   },
   "win": {
     "target": ["nsis"],

@@ -1,6 +1,6 @@
 {
   "name": "screen-recorder",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "High-quality screen recording software (MVP)",
   "main": "dist-electron/main/index.cjs",
   "private": true,
