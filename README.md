@@ -1,6 +1,6 @@
 # Screen Recorder (Screen recording app for Windows / macOS)
 
-![Screen Recorder main screen](docs/images/main-screen.png)
+![Screen Recorder main screen](docs/assets/main-screen.png)
 
 ## Added in the auto-update feature
 
