@@ -1,5 +1,7 @@
 # Screen Recorder (Screen recording app for Windows / macOS)
 
+![Screen Recorder main screen](docs/images/main-screen.png)
+
 ## Added in the auto-update feature
 
 - **Automatic updates via GitHub Releases (`electron-updater`)**
