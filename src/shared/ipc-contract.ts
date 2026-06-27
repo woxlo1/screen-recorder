@@ -47,6 +47,8 @@ export const IpcEvents = {
   ConversionProgress: 'recorder:conversionProgress',
   /** Auto-update status changes (checking/available/downloading/downloaded/error) */
   UpdateStatus: 'update:status',
+  /** Sent when the global "start/stop recording" shortcut is pressed (main -> renderer) */
+  ToggleRecordingShortcut: 'recorder:toggleRecordingShortcut',
 } as const;
 
 export type IpcEvent = (typeof IpcEvents)[keyof typeof IpcEvents];

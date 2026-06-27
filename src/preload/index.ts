@@ -87,6 +87,20 @@ const electronAPI = {
       ipcRenderer.removeListener(IpcEvents.UpdateStatus, listener);
     };
   },
+
+  /**
+   * Subscribes to the global "start/stop recording" shortcut (Ctrl/Cmd+Shift+R).
+   * Fired from the main process even when the app window isn't focused.
+   */
+  onToggleRecordingShortcut: (callback: () => void): (() => void) => {
+    const listener = (): void => {
+      callback();
+    };
+    ipcRenderer.on(IpcEvents.ToggleRecordingShortcut, listener);
+    return () => {
+      ipcRenderer.removeListener(IpcEvents.ToggleRecordingShortcut, listener);
+    };
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

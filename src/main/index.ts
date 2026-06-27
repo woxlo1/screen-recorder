@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session, desktopCapturer } from 'electron';
+import { app, BrowserWindow, session, desktopCapturer, globalShortcut } from 'electron';
 import path from 'node:path';
 import { registerIpcHandlers } from './ipc-handlers';
 import { persistentStore } from './persistent-store';
@@ -6,6 +6,7 @@ import { getDefaultOutputDir } from './paths';
 import { logFfmpegPath } from './ffmpeg-binary';
 import { recordingStateManager } from './recording-state';
 import { initializeAutoUpdater, checkForUpdates } from './auto-updater';
+import { IpcEvents } from '../shared/ipc-contract';
 
 // The main process is built as CommonJS, so __dirname is automatically injected by
 // Node.js and can be used as-is (the ESM equivalent, fileURLToPath(import.meta.url),
@@ -112,6 +113,33 @@ function setupDisplayMediaRequestHandler(): void {
   });
 }
 
+/**
+ * Global shortcut to start/stop recording from anywhere, even while the app
+ * window doesn't have focus.
+ *
+ * The actual recording logic (MediaRecorder / getDisplayMedia) only exists in
+ * the renderer, so this can't start/stop recording directly. Instead it just
+ * notifies the renderer via IPC; the renderer decides whether to start or stop
+ * based on its current status (see ControlsBar.tsx).
+ *
+ * Uses Ctrl+Shift+R on Windows/Linux and Cmd+Shift+R on macOS.
+ */
+function registerGlobalShortcuts(): void {
+  const accelerator = process.platform === 'darwin' ? 'Command+Shift+R' : 'Control+Shift+R';
+
+  const registered = globalShortcut.register(accelerator, () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return;
+    }
+    mainWindow.webContents.send(IpcEvents.ToggleRecordingShortcut);
+  });
+
+  if (!registered) {
+    // Most likely cause: another app already owns this key combination.
+    console.error(`[main] failed to register global shortcut: ${accelerator}`);
+  }
+}
+
 app.whenReady().then(() => {
   setupPermissions();
   setupDisplayMediaRequestHandler();
@@ -119,6 +147,7 @@ app.whenReady().then(() => {
   logFfmpegPath();
   registerIpcHandlers();
   createMainWindow();
+  registerGlobalShortcuts();
   initializeAutoUpdater();
   // Check for an update shortly after launch. Delayed slightly so it doesn't
   // compete with the app's own startup work, and wrapped in catch since a
@@ -140,6 +169,10 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
 
 /**

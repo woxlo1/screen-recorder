@@ -86,6 +86,22 @@ export function ControlsBar({ onRecordingStopped }: ControlsBarProps) {
     }
   };
 
+  // Global shortcut (Ctrl/Cmd+Shift+R), fired from main even without window focus.
+  // Toggles based on the current status: idle -> start, recording/paused -> stop.
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onToggleRecordingShortcut(() => {
+      if (status === 'idle') {
+        if (selectedSource) {
+          void handleStart();
+        }
+      } else {
+        void handleStop();
+      }
+    });
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, selectedSource]);
+
   const isIdle = status === 'idle';
 
   return (
